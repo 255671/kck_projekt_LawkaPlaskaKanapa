@@ -1,0 +1,8 @@
+{
+  "dependencies": {
+    "npx": "^10.2.2"
+  },
+  "devDependencies": {
+    "electron": "^41.2.1"
+  }
+}

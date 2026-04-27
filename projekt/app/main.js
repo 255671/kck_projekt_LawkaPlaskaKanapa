@@ -7,7 +7,7 @@ let mediapipeProcess;
 let audioProcess;
 
 function startPythonProcesses() {
-  const pythonPath = 'c:/Users/Jakub/Desktop/Studia/kck/.venv/Scripts/python.exe'; // pełna ścieżka do venv
+  const pythonPath = 'C:/Users/rumca/anaconda3/envs/projekt_kck/python.exe'; // pełna ścieżka do venv
 
   mediapipeProcess = spawn(pythonPath, [
     path.join(__dirname, '../python/mediapipe_service.py')
@@ -37,7 +37,7 @@ function startPythonProcesses() {
 let win;
 
 function createWindow() {
-  startPythonProcesses(); // 🔥 najważniejsze
+  startPythonProcesses();
 
   win = new BrowserWindow({
     width: 800,

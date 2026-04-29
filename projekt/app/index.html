@@ -36,6 +36,11 @@
       border: 3px solid #333;
       border-radius: 8px;
       background-color: #000;
+      transition: all 0.3s ease;
+    }
+
+    .hidden {
+      display: none !important;
     }
 
     #speech-output {
@@ -65,32 +70,55 @@
       color: white;
       border: none;
       border-radius: 8px;
+      font-weight: bold;
     }
 
     button:hover { background-color: #0056b3; }
+
+    #toggle-camera-btn {
+      background-color: #6c757d;
+    }
+    #toggle-camera-btn:hover {
+      background-color: #5a6268;
+    }
+
   </style>
 </head>
 <body>
 
-  <h1>MediaPipe Output</h1>
+<h1><b>Wirtualny trener</b></h1>
 
   <div class="container">
-    
+
     <div class="camera-section">
-      <img id="camera"/>
+      <img id="camera" class="hidden"/>
       <pre id="output"></pre>
     </div>
 
+    <div class="text-section">
+      <button id="toggle-camera-btn">Pokaż kamerę</button>
 
-
-<div class="text-section">
       <button id="speak-btn" style="background-color: #28a745;">Powiedz "Hello"</button>
-      
       <button id="listen-btn">Nasłuchuj komendy</button>
       <textarea id="speech-output" readonly placeholder="Rozpoznany tekst pojawi się tutaj..."></textarea>
     </div>
   </div>
 
   <script src="renderer.js"></script>
+
+  <script>
+    const toggleCameraBtn = document.getElementById('toggle-camera-btn');
+    const cameraElement = document.getElementById('camera');
+
+    toggleCameraBtn.addEventListener('click', () => {
+      if (cameraElement.classList.contains('hidden')) {
+        cameraElement.classList.remove('hidden');
+        toggleCameraBtn.textContent = 'Ukryj kamerę';
+      } else {
+        cameraElement.classList.add('hidden');
+        toggleCameraBtn.textContent = 'Pokaż kamerę';
+      }
+    });
+  </script>
 </body>
 </html>

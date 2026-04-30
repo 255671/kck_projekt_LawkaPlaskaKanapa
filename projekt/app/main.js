@@ -7,7 +7,7 @@ let mediapipeProcess;
 let audioProcess;
 
 function startPythonProcesses() {
-  const pythonPath = 'C:/Users/rumca/anaconda3/envs/projekt_kck/python.exe'; // pełna ścieżka do venv
+  const pythonPath = 'C:/Users/Piotr/anaconda3/envs/kckpython/python.exe'; // pełna ścieżka do venv
 
   mediapipeProcess = spawn(pythonPath, [
     path.join(__dirname, '../python/mediapipe_service.py')
@@ -67,10 +67,24 @@ function connect() {
     setTimeout(connect, 2000);
   });
 
-  ws.on('message', (data) => {
-    const parsed = JSON.parse(data);
-    win.webContents.send('mediapipe-data', parsed);
+ws.on('message', (data) => {
+    // Sprawdzamy, czy okno istnieje i czy nie zostało zniszczone
+    if (win && !win.isDestroyed()) {
+      const parsed = JSON.parse(data);
+      win.webContents.send('mediapipe-data', parsed);
+    }
   });
 }
 
 app.whenReady().then(createWindow);
+// Zabijanie procesów Pythona przy wyłączaniu aplikacji
+app.on('will-quit', () => {
+  if (mediapipeProcess) {
+    mediapipeProcess.kill();
+    console.log('Proces MediaPipe zostal zakolczony.');
+  }
+  if (audioProcess) {
+    audioProcess.kill();
+    console.log('Proces Audio zostal zakolczony.');
+  }
+});

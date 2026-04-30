@@ -4,11 +4,22 @@ import json
 import cv2
 import base64
 
+
+### CONSTANTS
+camera_refresh_rate = 10
+points_refresh_rate = 10
+
+
+# global cache variables
+frame = None # last captured camera image
+points = None # last calculated landmarks by mediapipe
+
 async def send_camera_data(websocket):
-    cap = cv2.VideoCapture(0)
+    global frame
+    frame = cv2.VideoCapture(0)
 
     while True:
-        ret, frame = cap.read()
+        ret, frame = frame.read()
         if not ret:
             continue
 
@@ -16,15 +27,13 @@ async def send_camera_data(websocket):
         _, buffer = cv2.imencode('.jpg', frame)
         jpg_as_text = base64.b64encode(buffer).decode('utf-8')
 
-        # MOCK PROCESSING
         data = {
-            "status": "frame_processed",
-            "dummy_metric": 123,
             "image": jpg_as_text
         }
 
         await websocket.send(json.dumps(data))
-        await asyncio.sleep(0.1)
+        await asyncio.sleep(1 / camera_refresh_rate)
+
 
 async def handler(websocket):
     print("Electron connected")

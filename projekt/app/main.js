@@ -3,19 +3,28 @@ const WebSocket = require('ws');
 const { spawn } = require('child_process');
 const path = require('path');
 
+
 let mediapipeProcess;
 let audioProcess;
 
 function startPythonProcesses() {
-  const pythonPath = 'C:/Users/Piotr/anaconda3/envs/kckpython/python.exe'; // pełna ścieżka do venv
+  const pythonCommand = 'conda';
+  const commonArgs = ['run', '-n', 'mediapipe_env', '--no-capture-output', 'python']; // pełna ścieżka do venv
 
-  mediapipeProcess = spawn(pythonPath, [
-    path.join(__dirname, '../python/mediapipe_service.py')
-  ]);
+  const spawnOptions = {
+    shell: true,
+    env: process.env
+  };
 
-  audioProcess = spawn(pythonPath, [
+  mediapipeProcess = spawn(pythonCommand, [
+    ...commonArgs,
+    path.join(__dirname, '../python/mediapipe_service.py'),
+  ], spawnOptions);
+
+  audioProcess = spawn(pythonCommand, [
+    ...commonArgs,
     path.join(__dirname, '../python/audio_service.py')
-  ]);
+  ], spawnOptions);
 
   mediapipeProcess.stdout.on('data', (data) => {
     console.log(`[MediaPipe]: ${data}`);
@@ -77,14 +86,21 @@ ws.on('message', (data) => {
 }
 
 app.whenReady().then(createWindow);
-// Zabijanie procesów Pythona przy wyłączaniu aplikacji
+
+// cleanup function
+// closes audio and mediapipe conda and their child python processes
+// WORKS ONLY FOR WINDOWS
 app.on('will-quit', () => {
+  console.log('App is quitting. Cleaning up...');
   if (mediapipeProcess) {
-    mediapipeProcess.kill();
-    console.log('Proces MediaPipe zostal zakolczony.');
+    spawn(`taskkill /pid ${mediapipeProcess.pid} /T /F`, (err) => {
+      if (err) console.log("MediaPipe already closed or error killed it.");
+    });
   }
+
   if (audioProcess) {
-    audioProcess.kill();
-    console.log('Proces Audio zostal zakolczony.');
+    spawn(`taskkill /pid ${audioProcess.pid} /T /F`, (err) => {
+      if (err) console.log("Audio already closed or error killed it.");
+    });
   }
 });

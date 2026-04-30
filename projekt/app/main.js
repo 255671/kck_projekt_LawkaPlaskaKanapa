@@ -76,9 +76,12 @@ function connect() {
     setTimeout(connect, 2000);
   });
 
-  ws.on('message', (data) => {
-    const parsed = JSON.parse(data);
-    win.webContents.send('mediapipe-data', parsed);
+ws.on('message', (data) => {
+    // Sprawdzamy, czy okno istnieje i czy nie zostało zniszczone
+    if (win && !win.isDestroyed()) {
+      const parsed = JSON.parse(data);
+      win.webContents.send('mediapipe-data', parsed);
+    }
   });
 }
 

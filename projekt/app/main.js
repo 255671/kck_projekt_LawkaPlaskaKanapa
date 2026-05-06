@@ -1,52 +1,193 @@
 const { app, BrowserWindow } = require('electron');
 const WebSocket = require('ws');
-const { spawn } = require('child_process');
+const { spawn, spawnSync } = require('child_process');
+const net = require('net');
 const path = require('path');
 
 
 let mediapipeProcess;
 let audioProcess;
+let mediapipePort = 8765;
 
-function startPythonProcesses() {
-  const pythonCommand = 'conda';
-  const commonArgs = ['run', '-n', 'mediapipe_env', '--no-capture-output', 'python']; // pełna ścieżka do venv
+function getOldPythonServicePids() {
+  if (process.platform !== 'win32') {
+    return [];
+  }
 
+  try {
+    const command = "Get-CimInstance Win32_Process -Filter \"Name='python.exe'\" | Where-Object { $_.CommandLine -match 'audio_service_new\\.py|mediapipe_service\\.py' } | Select-Object ProcessId,CommandLine | ConvertTo-Json";
+    const result = spawnSync('powershell.exe', ['-NoProfile', '-Command', command], {
+      env: process.env,
+      encoding: 'utf8'
+    });
+
+    if (result.status !== 0 || !result.stdout) {
+      return [];
+    }
+
+    let output = result.stdout.trim();
+    if (!output) {
+      return [];
+    }
+
+    let parsed = JSON.parse(output);
+    if (!Array.isArray(parsed)) {
+      parsed = [parsed];
+    }
+
+    return parsed
+      .filter((item) => item && item.ProcessId && item.CommandLine)
+      .map((item) => Number(item.ProcessId));
+  } catch (error) {
+    console.warn('[Main] Nie udało się odczytać starych procesów Pythona:', error);
+    return [];
+  }
+}
+
+function cleanupOldPythonServices() {
+  const pids = getOldPythonServicePids();
+  if (pids.length === 0) {
+    return;
+  }
+
+  console.log(`[Main] Znalazłem stare procesy Pythona: ${pids.join(', ')}`);
+  for (const pid of pids) {
+    try {
+      spawn('taskkill', ['/PID', String(pid), '/T', '/F'], { env: process.env });
+      console.log(`[Main] Zabijam stary proces Python pid=${pid}`);
+    } catch (error) {
+      console.warn(`[Main] Nie udało się zabić starego procesu pid=${pid}:`, error);
+    }
+  }
+}
+
+function waitForPort(host, port, timeoutMs = 10000) {
+  return new Promise((resolve, reject) => {
+    const deadline = Date.now() + timeoutMs;
+
+    const attempt = () => {
+      const socket = new net.Socket();
+      socket.setTimeout(500);
+      socket.once('connect', () => {
+        socket.destroy();
+        resolve();
+      });
+      socket.once('timeout', () => {
+        socket.destroy();
+        retry();
+      });
+      socket.once('error', () => {
+        socket.destroy();
+        retry();
+      });
+      socket.connect(port, host);
+    };
+
+    const retry = () => {
+      if (Date.now() > deadline) {
+        reject(new Error(`Port ${port} did not open within ${timeoutMs}ms`));
+        return;
+      }
+      setTimeout(attempt, 200);
+    };
+
+    attempt();
+  });
+}
+
+function findPythonExecutable() {
+  const candidates = [];
+  if (process.env.CONDA_PREFIX) {
+    candidates.push(path.join(process.env.CONDA_PREFIX, process.platform === 'win32' ? 'python.exe' : 'bin/python'));
+  }
+  if (process.env.VIRTUAL_ENV) {
+    candidates.push(path.join(process.env.VIRTUAL_ENV, process.platform === 'win32' ? 'python.exe' : 'bin/python'));
+  }
+  candidates.push('python');
+  candidates.push('python3');
+
+  for (const candidate of candidates) {
+    try {
+      const result = spawnSync(candidate, ['--version'], { env: process.env, stdio: 'ignore' });
+      if (result.status === 0) {
+        console.log(`[Main] Using Python executable: ${candidate}`);
+        return candidate;
+      }
+    } catch (error) {
+      // ignore failed candidate
+    }
+  }
+
+  console.warn('[Main] Nie znaleziono dostępnego Pythona; używam "python" jako fallback.');
+  return 'python';
+}
+
+const pythonExecutable = findPythonExecutable();
+
+function getAvailablePort() {
+  return new Promise((resolve, reject) => {
+    const server = net.createServer();
+    server.unref();
+    server.on('error', reject);
+    server.listen(0, '127.0.0.1', () => {
+      const address = server.address();
+      if (address && typeof address === 'object') {
+        const port = address.port;
+        server.close(() => resolve(port));
+      } else {
+        server.close(() => reject(new Error('Invalid address object')));
+      }
+    });
+  });
+}
+
+async function startPythonProcesses() {
   const spawnOptions = {
-    shell: true,
     env: process.env
   };
 
-  mediapipeProcess = spawn(pythonCommand, [
-    ...commonArgs,
+  mediapipePort = await getAvailablePort();
+  console.log(`[Main] Selected MediaPipe port: ${mediapipePort}`);
+
+  mediapipeProcess = spawn(pythonExecutable, [
+    '-u',
     path.join(__dirname, '../python/mediapipe_service.py'),
+    '--port',
+    String(mediapipePort),
   ], spawnOptions);
 
-  audioProcess = spawn(pythonCommand, [
-    ...commonArgs,
-    path.join(__dirname, '../python/audio_service.py')
+  audioProcess = spawn(pythonExecutable, [
+    '-u',
+    path.join(__dirname, '../python/audio_service_new.py')
   ], spawnOptions);
 
   mediapipeProcess.stdout.on('data', (data) => {
-    console.log(`[MediaPipe]: ${data}`);
+    const text = data.toString().trim();
+    if (text) console.log(`[MediaPipe]: ${text}`);
   });
 
   mediapipeProcess.stderr.on('data', (data) => {
-    console.error(`[MediaPipe ERROR]: ${data}`);
+    const text = data.toString().trim();
+    if (text) console.error(`[MediaPipe ERROR]: ${text}`);
   });
 
   audioProcess.stdout.on('data', (data) => {
-    console.log(`[Audio]: ${data}`);
+    const text = data.toString().trim();
+    if (text) console.log(`[Audio]: ${text}`);
   });
 
   audioProcess.stderr.on('data', (data) => {
-    console.error(`[Audio ERROR]: ${data}`);
+    const text = data.toString().trim();
+    if (text) console.error(`[Audio ERROR]: ${text}`);
   });
 }
 
 let win;
 
-function createWindow() {
-  startPythonProcesses();
+async function createWindow() {
+  cleanupOldPythonServices();
+  await startPythonProcesses();
+  await waitForPort('127.0.0.1', mediapipePort, 10000);
 
   win = new BrowserWindow({
     width: 800,
@@ -54,6 +195,15 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false
+    }
+  });
+
+  // Handle microphone permission requests
+  win.webContents.session.setPermissionRequestHandler((webContents, permission, callback) => {
+    if (permission === 'media') {
+      callback(true);
+    } else {
+      callback(false);
     }
   });
 
@@ -65,7 +215,7 @@ function createWindow() {
 }
 
 function connect() {
-  const ws = new WebSocket('ws://localhost:8765');
+  const ws = new WebSocket(`ws://127.0.0.1:${mediapipePort}`);
 
   ws.on('open', () => {
     console.log('Connected');
@@ -76,7 +226,7 @@ function connect() {
     setTimeout(connect, 2000);
   });
 
-ws.on('message', (data) => {
+  ws.on('message', (data) => {
     // Sprawdzamy, czy okno istnieje i czy nie zostało zniszczone
     if (win && !win.isDestroyed()) {
       const parsed = JSON.parse(data);
@@ -87,20 +237,36 @@ ws.on('message', (data) => {
 
 app.whenReady().then(createWindow);
 
-// cleanup function
-// closes audio and mediapipe conda and their child python processes
-// WORKS ONLY FOR WINDOWS
-app.on('will-quit', () => {
-  console.log('App is quitting. Cleaning up...');
-  if (mediapipeProcess) {
-    spawn(`taskkill /pid ${mediapipeProcess.pid} /T /F`, (err) => {
-      if (err) console.log("MediaPipe already closed or error killed it.");
-    });
+function terminatePythonProcess(child, label) {
+  if (!child || child.killed) {
+    return;
   }
 
-  if (audioProcess) {
-    spawn(`taskkill /pid ${audioProcess.pid} /T /F`, (err) => {
-      if (err) console.log("Audio already closed or error killed it.");
-    });
+  try {
+    child.kill();
+    console.log(`[Main] Sent termination signal to ${label} process (pid=${child.pid}).`);
+  } catch (error) {
+    console.error(`[Main] Failed to kill ${label} process:`, error);
+    if (process.platform === 'win32') {
+      spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], { env: process.env });
+    }
+  }
+}
+
+function cleanupPythonProcesses() {
+  console.log('[Main] Cleaning up Python child processes...');
+  terminatePythonProcess(mediapipeProcess, 'MediaPipe');
+  terminatePythonProcess(audioProcess, 'Audio');
+}
+
+app.on('before-quit', cleanupPythonProcesses);
+app.on('will-quit', cleanupPythonProcesses);
+app.on('quit', cleanupPythonProcesses);
+process.on('exit', cleanupPythonProcesses);
+
+app.on('window-all-closed', () => {
+  if (process.platform !== 'darwin') {
+    cleanupPythonProcesses();
+    app.quit();
   }
 });

@@ -1,4 +1,5 @@
 import asyncio
+import os
 import sys
 
 import websockets
@@ -60,13 +61,34 @@ async def recalc_points():
         generate_points()
         await asyncio.sleep(1 / points_refresh_rate)
 
+def get_port() -> int:
+    default_port = 8765
+    for i, arg in enumerate(sys.argv):
+        if arg in ('--port', '-p') and i + 1 < len(sys.argv):
+            try:
+                return int(sys.argv[i + 1])
+            except ValueError:
+                break
+
+    env_port = os.getenv('MEDIAPIPE_WS_PORT')
+    if env_port:
+        try:
+            return int(env_port)
+        except ValueError:
+            pass
+
+    return default_port
+
 async def handler(websocket):
     print("Electron connected")
     await send_camera_data(websocket)
 
 async def start_server():
+    port = get_port()
+    print(f"[MediaPipe] Starting websocket server on 127.0.0.1:{port}")
     # Use websockets.serve as a context manager or await it
-    async with websockets.serve(handler, "localhost", 8765):
+    # Bind explicitly to IPv4 localhost to avoid ::1/IPv6 binding issues on Windows.
+    async with websockets.serve(handler, "127.0.0.1", port):
         await asyncio.Future()  # This keeps the server running forever
 
 async def main():

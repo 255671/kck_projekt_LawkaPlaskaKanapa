@@ -1,0 +1,24 @@
+# Virtual Trainer - Python Dependencies
+# Install with: pip install -r requirements.txt
+
+# Web framework
+Flask==3.0.0
+
+# Audio processing
+pyttsx3==2.90
+SpeechRecognition==3.10.0
+PyAudio==0.2.13
+
+# Computer vision and pose detection
+opencv-python==4.8.1.78
+mediapipe==0.10.14
+
+# WebSocket support
+websockets==12.0
+
+# Windows COM support (for pyttsx3)
+pywin32==306
+
+# Additional utilities
+numpy==1.24.3
+Pillow==10.0.1

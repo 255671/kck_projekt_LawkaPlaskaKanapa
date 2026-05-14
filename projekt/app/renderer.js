@@ -65,242 +65,276 @@ ipcRenderer.on('mediapipe-data', (event, data) => {
 
   if (data.image) {
     document.getElementById('camera').src = 'data:image/jpeg;base64,' + data.image;
+    // Opcjonalnie: jeśli masz oddzielny feed z side kamery
+    // document.getElementById('camera-side').src = 'data:image/jpeg;base64,' + data.imageSide;
   } else {
-    document.getElementById('output').innerText = JSON.stringify(data);
+    // W tej uproszczonej wersji logi lądują w textarea
+    const output = document.getElementById('output');
+    output.innerText += '\n' + JSON.stringify(data);
+    output.scrollTop = output.scrollHeight;
   }
 });
-
-/*
-async function sendToAudio() {
-  await fetch(`${audioServiceUrl}/speak`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ text: 'Hello from Electron' })
-  });
-}
-*/
 
 const speakBtn = document.getElementById('speak-btn');
+const speechOutput = document.getElementById('speech-output');
 
 //obsluga przycisku czytania (text to speech)
-speakBtn.addEventListener('click', async () => {
-  if (isAudioOperationInProgress) {
-    console.log("Operacja audio już w trakcie, czekaj...");
-    return;
-  }
-
-  const textToSay = speechOutput.value.trim();
-
-  if (textToSay === "") {
-    console.log("Pole tekstowe jest puste, nie ma czego czytać.");
-    return; 
-  }
-  
-  // Wyczyść linie zawierające [Info] i undefined
-  const cleanText = textToSay
-    .split('\n')
-    .filter(line => !line.includes('[Info]') && !line.includes('undefined'))
-    .join(' ')
-    .trim();
-  
-  if (cleanText === "") {
-    console.log("Brak czystego tekstu do przeczytania.");
-    return;
-  }
-
-  isAudioOperationInProgress = true;
-  speakBtn.disabled = true;
-  speakBtn.innerText = "Mówię...";
-
-  try {
-    // Pobierz aktualne ustawienia języka
-    const currentSettings = loadSettings();
-    //tekst do Pythona
-    const response = await fetchWithTimeout(`${audioServiceUrl}/speak`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 
-        text: cleanText,
-        language: currentSettings.language
-      })
-    }, 10000);
-
-    if (!response.ok) {
-      const body = await response.text();
-      throw new Error(`Błąd serwera audio: ${response.status} ${body}`);
+if(speakBtn && speechOutput) {
+    speakBtn.addEventListener('click', async () => {
+    if (isAudioOperationInProgress) {
+        console.log("Operacja audio już w trakcie, czekaj...");
+        return;
     }
 
-    const data = await response.json();
-    console.log("Wysłano tekst do przeczytania.", data);
-  } catch (error) {
-    console.error("Błąd połączenia z serwerem Flask:", error);
-    speechOutput.value += `\n[Błąd]: Nie udało się przeczytać tekstu: ${error.message}`;
-  } finally {
-    isAudioOperationInProgress = false;
-    speakBtn.disabled = false;
-    speakBtn.innerText = "Przeczytaj tekst";
-  }
-});
+    const textToSay = speechOutput.value.trim();
+
+    if (textToSay === "") {
+        console.log("Pole tekstowe jest puste, nie ma czego czytać.");
+        return;
+    }
+
+    // Wyczyść linie zawierające [Info] i undefined
+    const cleanText = textToSay
+        .split('\n')
+        .filter(line => !line.includes('[Info]') && !line.includes('undefined'))
+        .join(' ')
+        .trim();
+
+    if (cleanText === "") {
+        console.log("Brak czystego tekstu do przeczytania.");
+        return;
+    }
+
+    isAudioOperationInProgress = true;
+    speakBtn.disabled = true;
+    speakBtn.innerText = "Mówię...";
+
+    try {
+        // Pobierz aktualne ustawienia języka
+        const currentSettings = loadSettings();
+        //tekst do Pythona
+        const response = await fetchWithTimeout(`${audioServiceUrl}/speak`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            text: cleanText,
+            language: currentSettings.language
+        })
+        }, 10000);
+
+        if (!response.ok) {
+        const body = await response.text();
+        throw new Error(`Błąd serwera audio: ${response.status} ${body}`);
+        }
+
+        const data = await response.json();
+        console.log("Wysłano tekst do przeczytania.", data);
+    } catch (error) {
+        console.error("Błąd połączenia z serwerem Flask:", error);
+        speechOutput.value += `\n[Błąd]: Nie udało się przeczytać tekstu: ${error.message}`;
+    } finally {
+        isAudioOperationInProgress = false;
+        speakBtn.disabled = false;
+        speakBtn.innerText = "Przeczytaj tekst";
+    }
+    });
+}
 
 const helloBtn = document.getElementById('hello-btn');
 
 //obsługa przycisku kalibracji dźwięku
 const calibrateBtn = document.getElementById('calibrate-btn');
-calibrateBtn.addEventListener('click', async () => {
-  if (isAudioOperationInProgress) {
-    console.log("Operacja audio już w trakcie, czekaj...");
-    return;
-  }
-
-  isAudioOperationInProgress = true;
-  calibrateBtn.disabled = true;
-  calibrateBtn.innerText = "Kalibruję dźwięk...";
-
-  try {
-    const response = await fetchWithTimeout(`${audioServiceUrl}/calibrate?duration=2.0`, {}, 15000);
-    if (!response.ok) {
-      const body = await response.text();
-      throw new Error(`Błąd serwera audio: ${response.status} ${body}`);
+if(calibrateBtn && speechOutput) {
+    calibrateBtn.addEventListener('click', async () => {
+    if (isAudioOperationInProgress) {
+        console.log("Operacja audio już w trakcie, czekaj...");
+        return;
     }
 
-    const data = await response.json();
-    console.log("Odpowiedź /calibrate:", data);
-    if (data.status === 'success') {
-      speechOutput.value += `\n✓ Kalibracja zakończona pomyślnie`;
-      speechOutput.value += `\n  - Szum otoczenia: ${data.ambient_noise}`;
-      speechOutput.value += `\n  - Próg mowy: ${data.speech_threshold}`;
-      speechOutput.value += `\n  - Próg energii: ${data.energy_threshold}`;
-    } else {
-      speechOutput.value += `\n✗ Błąd kalibracji: ${data.message}`;
+    isAudioOperationInProgress = true;
+    calibrateBtn.disabled = true;
+    calibrateBtn.innerText = "Kalibruję dźwięk...";
+
+    try {
+        const response = await fetchWithTimeout(`${audioServiceUrl}/calibrate?duration=2.0`, {}, 15000);
+        if (!response.ok) {
+        const body = await response.text();
+        throw new Error(`Błąd serwera audio: ${response.status} ${body}`);
+        }
+
+        const data = await response.json();
+        console.log("Odpowiedź /calibrate:", data);
+        if (data.status === 'success') {
+        speechOutput.value += `\n✓ Kalibracja zakończona pomyślnie`;
+        speechOutput.value += `\n  - Szum otoczenia: ${data.ambient_noise}`;
+        speechOutput.value += `\n  - Próg mowy: ${data.speech_threshold}`;
+        speechOutput.value += `\n  - Próg energii: ${data.energy_threshold}`;
+        } else {
+        speechOutput.value += `\n✗ Błąd kalibracji: ${data.message}`;
+        }
+    } catch (error) {
+        speechOutput.value += `\n[Błąd kalibracji]: ${error.message}`;
+        console.error("Błąd /calibrate:", error);
+    } finally {
+        isAudioOperationInProgress = false;
+        calibrateBtn.disabled = false;
+        calibrateBtn.innerText = "Kalibruj dźwięk";
+        speechOutput.scrollTop = speechOutput.scrollHeight;
     }
-  } catch (error) {
-    speechOutput.value += `\n[Błąd kalibracji]: ${error.message}`;
-    console.error("Błąd /calibrate:", error);
-  } finally {
-    isAudioOperationInProgress = false;
-    calibrateBtn.disabled = false;
-    calibrateBtn.innerText = "Kalibruj dźwięk";
-    speechOutput.scrollTop = speechOutput.scrollHeight;
-  }
-});
+    });
+}
 
 //obsługa przycisku "Hello"
-helloBtn.addEventListener('click', async () => {
-  if (isAudioOperationInProgress) {
-    console.log("Operacja audio już w trakcie, czekaj...");
-    return;
-  }
-
-  isAudioOperationInProgress = true;
-  helloBtn.disabled = true;
-  helloBtn.innerText = "Mówię...";
-
-  try {
-    const response = await fetchWithTimeout(`${audioServiceUrl}/hello`, {}, 10000);
-    if (!response.ok) {
-      const body = await response.text();
-      throw new Error(`Błąd serwera audio: ${response.status} ${body}`);
+if(helloBtn) {
+    helloBtn.addEventListener('click', async () => {
+    if (isAudioOperationInProgress) {
+        console.log("Operacja audio już w trakcie, czekaj...");
+        return;
     }
 
-    const data = await response.json();
-    if (data.status === 'success') {
-      console.log("Powiedziano 'Hello'");
-    } else {
-      console.error("Błąd podczas mówienia:", data.message);
+    isAudioOperationInProgress = true;
+    helloBtn.disabled = true;
+    helloBtn.innerText = "Mówię...";
+
+    try {
+        const response = await fetchWithTimeout(`${audioServiceUrl}/hello`, {}, 10000);
+        if (!response.ok) {
+        const body = await response.text();
+        throw new Error(`Błąd serwera audio: ${response.status} ${body}`);
+        }
+
+        const data = await response.json();
+        if (data.status === 'success') {
+        console.log("Powiedziano 'Hello'");
+        } else {
+        console.error("Błąd podczas mówienia:", data.message);
+        }
+    } catch (error) {
+        console.error("Błąd połączenia z serwerem Flask:", error);
+    } finally {
+        isAudioOperationInProgress = false;
+        helloBtn.disabled = false;
+        helloBtn.innerText = "Powiedz \"Hello\"";
     }
-  } catch (error) {
-    console.error("Błąd połączenia z serwerem Flask:", error);
-  } finally {
-    isAudioOperationInProgress = false;
-    helloBtn.disabled = false;
-    helloBtn.innerText = "Powiedz \"Hello\"";
-  }
-});
+    });
+}
 
 const repeatBtn = document.getElementById('repeat-btn');
 
 //obsługa przycisku powtarzania głosu
-repeatBtn.addEventListener('click', async () => {
-  if (isAudioOperationInProgress) {
-    console.log("Operacja audio już w trakcie, czekaj...");
-    return;
-  }
-
-  speechOutput.scrollTop = speechOutput.scrollHeight;
-  isAudioOperationInProgress = true;
-  repeatBtn.disabled = true;
-  repeatBtn.innerText = "Słucham i powtarzam (czeka na ciszę)...";
-
-  try {
-    // Pobierz aktualne ustawienia języka
-    const currentSettings = loadSettings();
-    const response = await fetchWithTimeout(`${audioServiceUrl}/repeat?timeout=30&dynamic=true&language=${currentSettings.language}`, {}, 45000);
-    if (!response.ok) {
-      const body = await response.text();
-      throw new Error(`Błąd serwera audio: ${response.status} ${body}`);
+if(repeatBtn && speechOutput) {
+    repeatBtn.addEventListener('click', async () => {
+    if (isAudioOperationInProgress) {
+        console.log("Operacja audio już w trakcie, czekaj...");
+        return;
     }
 
-    const data = await response.json();
-    console.log("Odpowiedź /repeat:", data);
-    if (data.status === 'success') {
-      speechOutput.value += `\nPowtórzono: "${data.original_text}"`;
-    } else {
-      speechOutput.value += `\n[Info]: ${data.message}`;
-    }
-  } catch (error) {
-    speechOutput.value += `\n[Błąd]: ${error.message}. Upewnij się, że audio_service.py działa.`;
-    console.error("Błąd /repeat:", error);
-  } finally {
-    isAudioOperationInProgress = false;
-    repeatBtn.disabled = false;
-    repeatBtn.innerText = "Powtórz głos (dynamicznie)";
     speechOutput.scrollTop = speechOutput.scrollHeight;
-  }
-});
+    isAudioOperationInProgress = true;
+    repeatBtn.disabled = true;
+    repeatBtn.innerText = "Słucham i powtarzam (czeka na ciszę)...";
+
+    try {
+        // Pobierz aktualne ustawienia języka
+        const currentSettings = loadSettings();
+        const response = await fetchWithTimeout(`${audioServiceUrl}/repeat?timeout=30&dynamic=true&language=${currentSettings.language}`, {}, 45000);
+        if (!response.ok) {
+        const body = await response.text();
+        throw new Error(`Błąd serwera audio: ${response.status} ${body}`);
+        }
+
+        const data = await response.json();
+        console.log("Odpowiedź /repeat:", data);
+        if (data.status === 'success') {
+        speechOutput.value += `\nPowtórzono: "${data.original_text}"`;
+        } else {
+        speechOutput.value += `\n[Info]: ${data.message}`;
+        }
+    } catch (error) {
+        speechOutput.value += `\n[Błąd]: ${error.message}. Upewnij się, że audio_service.py działa.`;
+        console.error("Błąd /repeat:", error);
+    } finally {
+        isAudioOperationInProgress = false;
+        repeatBtn.disabled = false;
+        repeatBtn.innerText = "Powtórz głos";
+        speechOutput.scrollTop = speechOutput.scrollHeight;
+    }
+    });
+}
 
 const listenBtn = document.getElementById('listen-btn');
-const speechOutput = document.getElementById('speech-output');
-
-
 
 //obsluga klikniecia przycisku do nasluchiwania (speech to text)
-listenBtn.addEventListener('click', async () => {
-  if (isAudioOperationInProgress) {
-    console.log("Operacja audio już w trakcie, czekaj...");
-    return;
-  }
-
-  speechOutput.scrollTop = speechOutput.scrollHeight; 
-  isAudioOperationInProgress = true;
-  listenBtn.disabled = true;
-  listenBtn.innerText = "Dynamicznie nasłuchuję (czeka na ciszę)...";
-
-  try {
-    // Pobierz aktualne ustawienia języka
-    const currentSettings = loadSettings();
-    // zapytanie do serwera flask z dynamicznym nasłuchiwaniem
-    const response = await fetchWithTimeout(`${audioServiceUrl}/listen?dynamic=true&timeout=30&language=${currentSettings.language}`, {}, 45000);
-    if (!response.ok) {
-      const body = await response.text();
-      throw new Error(`Błąd serwera audio: ${response.status} ${body}`);
+if(listenBtn && speechOutput) {
+    listenBtn.addEventListener('click', async () => {
+    if (isAudioOperationInProgress) {
+        console.log("Operacja audio już w trakcie, czekaj...");
+        return;
     }
-    const data = await response.json();
 
-    if (data.status === 'success') {
-      speechOutput.value += `\nTy: ${data.text}`;
-    } else {
-      speechOutput.value += `\n[Info]: ${data.message}`;
-    }
-  } catch (error) {
-    speechOutput.value += `\n[Błąd]: ${error.message}. Upewnij się, że audio_service.py działa.`;
-    console.error("Błąd /listen:", error);
-  } finally {
-    isAudioOperationInProgress = false;
-    listenBtn.disabled = false;
-    listenBtn.innerText = "Nasłuchuj komendy (dynamicznie)";
     speechOutput.scrollTop = speechOutput.scrollHeight;
+    isAudioOperationInProgress = true;
+    listenBtn.disabled = true;
+    listenBtn.innerText = "Nasłuchuję...";
+
+    try {
+        // Pobierz aktualne ustawienia języka
+        const currentSettings = loadSettings();
+        // zapytanie do serwera flask z dynamicznym nasłuchiwaniem
+        const response = await fetchWithTimeout(`${audioServiceUrl}/listen?dynamic=true&timeout=30&language=${currentSettings.language}`, {}, 45000);
+        if (!response.ok) {
+        const body = await response.text();
+        throw new Error(`Błąd serwera audio: ${response.status} ${body}`);
+        }
+        const data = await response.json();
+
+        if (data.status === 'success') {
+        speechOutput.value += `\nTy: ${data.text}`;
+        } else {
+        speechOutput.value += `\n[Info]: ${data.message}`;
+        }
+    } catch (error) {
+        speechOutput.value += `\n[Błąd]: ${error.message}. Upewnij się, że audio_service.py działa.`;
+        console.error("Błąd /listen:", error);
+    } finally {
+        isAudioOperationInProgress = false;
+        listenBtn.disabled = false;
+        listenBtn.innerText = "Nasłuchuj komendy";
+        speechOutput.scrollTop = speechOutput.scrollHeight;
+    }
+    });
+}
+
+
+// --- WYBÓR KAMERY ---
+const cameraSelect = document.getElementById('camera-select');
+
+async function enumerateCameras() {
+  if (!cameraSelect) return;
+  try {
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const videoDevices = devices.filter(device => device.kind === 'videoinput');
+
+    cameraSelect.innerHTML = '';
+
+    if (videoDevices.length === 0) {
+      cameraSelect.innerHTML = '<option value="">Brak dostępnych kamer</option>';
+      return;
+    }
+
+    videoDevices.forEach((device, index) => {
+      const option = document.createElement('option');
+      option.value = device.deviceId;
+      option.textContent = device.label || `Kamera ${index + 1}`;
+      cameraSelect.appendChild(option);
+    });
+
+  } catch (error) {
+    console.error('Błąd przy pobieraniu listy kamer:', error);
+    cameraSelect.innerHTML = '<option value="">Błąd dostępu do kamer</option>';
   }
-});
+}
+
 
 // Audio monitoring for debugging
 let audioContext = null;
@@ -320,6 +354,7 @@ const audioDebugInfo = document.getElementById('audio-debug-info');
 
 // Enumerate available microphones
 async function enumerateMicrophones() {
+  if(!micSelect) return;
   try {
     const devices = await navigator.mediaDevices.enumerateDevices();
     const microphones = devices.filter(device => device.kind === 'audioinput');
@@ -335,18 +370,17 @@ async function enumerateMicrophones() {
     console.log('[Audio Debug] Available microphones:', microphones.length);
   } catch (error) {
     console.error('[Audio Debug] Error enumerating microphones:', error);
-    audioDebugInfo.textContent = 'Błąd enumeracji mikrofonów';
+    if(audioDebugInfo) audioDebugInfo.textContent = 'Błąd enumeracji mikrofonów';
   }
 }
 
-// Initialize microphone enumeration
-enumerateMicrophones();
-
 // Handle microphone selection change
-micSelect.addEventListener('change', (e) => {
-  selectedDeviceId = e.target.value || null;
-  console.log('[Audio Debug] Selected microphone:', selectedDeviceId);
-});
+if(micSelect) {
+    micSelect.addEventListener('change', (e) => {
+    selectedDeviceId = e.target.value || null;
+    console.log('[Audio Debug] Selected microphone:', selectedDeviceId);
+    });
+}
 
 async function startAudioMonitoring() {
   try {
@@ -390,23 +424,27 @@ async function startAudioMonitoring() {
     isMonitoring = true;
     updateAudioLevel();
 
-    const selectedMicName = micSelect.options[micSelect.selectedIndex].textContent;
-    audioDebugInfo.textContent = `Monitorowanie audio aktywne (FFT: ${analyser.fftSize}, Context: ${audioContext.state}, Mic: ${selectedMicName})`;
+    if(micSelect && audioDebugInfo) {
+        const selectedMicName = micSelect.options[micSelect.selectedIndex].textContent;
+        audioDebugInfo.textContent = `Monitorowanie audio aktywne (FFT: ${analyser.fftSize}, Context: ${audioContext.state}, Mic: ${selectedMicName})`;
+    }
     console.log('[Audio Debug] Started monitoring, context state:', audioContext.state);
 
   } catch (error) {
     console.error('[Audio Debug] Error starting monitoring:', error);
-    audioDebugInfo.textContent = `Błąd: ${error.message}`;
+    if(audioDebugInfo) {
+        audioDebugInfo.textContent = `Błąd: ${error.message}`;
 
-    // Additional error information
-    if (error.name === 'NotAllowedError') {
-      audioDebugInfo.textContent += ' - Uprawnienia do mikrofonu zostały odrzucone';
-    } else if (error.name === 'NotFoundError') {
-      audioDebugInfo.textContent += ' - Mikrofon nie został znaleziony';
-    } else if (error.name === 'NotReadableError') {
-      audioDebugInfo.textContent += ' - Mikrofon jest już używany przez inną aplikację';
-    } else if (error.name === 'OverconstrainedError') {
-      audioDebugInfo.textContent += ' - Wybrany mikrofon nie jest dostępny';
+        // Additional error information
+        if (error.name === 'NotAllowedError') {
+        audioDebugInfo.textContent += ' - Uprawnienia do mikrofonu zostały odrzucone';
+        } else if (error.name === 'NotFoundError') {
+        audioDebugInfo.textContent += ' - Mikrofon nie został znaleziony';
+        } else if (error.name === 'NotReadableError') {
+        audioDebugInfo.textContent += ' - Mikrofon jest już używany przez inną aplikację';
+        } else if (error.name === 'OverconstrainedError') {
+        audioDebugInfo.textContent += ' - Wybrany mikrofon nie jest dostępny';
+        }
     }
   }
 }
@@ -431,10 +469,11 @@ function stopAudioMonitoring() {
   dataArray = null;
   isMonitoring = false;
 
-  audioLevelBar.style.width = '0%';
-  audioLevelText.textContent = 'Poziom: 0%';
-  audioDebugInfo.textContent = 'Monitorowanie zatrzymane';
-
+  if(audioLevelBar && audioLevelText && audioDebugInfo) {
+      audioLevelBar.style.width = '0%';
+      audioLevelText.textContent = 'Poziom: 0%';
+      audioDebugInfo.textContent = 'Monitorowanie zatrzymane';
+  }
   console.log('[Audio Debug] Stopped monitoring');
 }
 
@@ -478,35 +517,39 @@ function updateAudioLevel() {
   // Use the higher of the two measurements
   const finalLevel = Math.max(level, timeLevel);
 
-  // Update UI
-  audioLevelBar.style.width = `${finalLevel}%`;
-  audioLevelText.textContent = `Poziom: ${finalLevel.toFixed(1)}% (RMS: ${rms.toFixed(3)}, Time: ${timeRms.toFixed(3)})`;
+  if(audioLevelBar && audioLevelText) {
+      // Update UI
+      audioLevelBar.style.width = `${finalLevel}%`;
+      audioLevelText.textContent = `Poziom: ${finalLevel.toFixed(1)}% (RMS: ${rms.toFixed(3)}, Time: ${timeRms.toFixed(3)})`;
 
-  // Color coding based on level
-  if (finalLevel < 5) {
-    audioLevelBar.style.background = '#6c757d'; // Gray for very low
-  } else if (finalLevel < 20) {
-    audioLevelBar.style.background = '#28a745'; // Green for normal
-  } else if (finalLevel < 50) {
-    audioLevelBar.style.background = '#ffc107'; // Yellow for high
-  } else {
-    audioLevelBar.style.background = '#dc3545'; // Red for very high
+      // Color coding based on level
+      if (finalLevel < 5) {
+        audioLevelBar.style.background = '#6c757d'; // Gray for very low
+      } else if (finalLevel < 20) {
+        audioLevelBar.style.background = '#28a745'; // Green for normal
+      } else if (finalLevel < 50) {
+        audioLevelBar.style.background = '#ffc107'; // Yellow for high
+      } else {
+        audioLevelBar.style.background = '#dc3545'; // Red for very high
+      }
   }
 
   animationFrame = requestAnimationFrame(updateAudioLevel);
 }
 
-startAudioDebugBtn.addEventListener('click', () => {
-  startAudioMonitoring();
-  startAudioDebugBtn.style.display = 'none';
-  stopAudioDebugBtn.style.display = 'inline-block';
-});
+if(startAudioDebugBtn && stopAudioDebugBtn) {
+    startAudioDebugBtn.addEventListener('click', () => {
+    startAudioMonitoring();
+    startAudioDebugBtn.style.display = 'none';
+    stopAudioDebugBtn.style.display = 'inline-block';
+    });
 
-stopAudioDebugBtn.addEventListener('click', () => {
-  stopAudioMonitoring();
-  startAudioDebugBtn.style.display = 'inline-block';
-  stopAudioDebugBtn.style.display = 'none';
-});
+    stopAudioDebugBtn.addEventListener('click', () => {
+    stopAudioMonitoring();
+    startAudioDebugBtn.style.display = 'inline-block';
+    stopAudioDebugBtn.style.display = 'none';
+    });
+}
 
 // Cleanup on page unload
 window.addEventListener('beforeunload', () => {
@@ -522,58 +565,68 @@ const speechRateSlider = document.getElementById('speech-rate-slider');
 const speechRateDisplay = document.getElementById('speech-rate-display');
 
 // Aktualizacja wyświetlania głośności
-volumeSlider.addEventListener('input', () => {
-  volumeDisplay.textContent = volumeSlider.value + '%';
-});
+if(volumeSlider && volumeDisplay) {
+    volumeSlider.addEventListener('input', () => {
+    volumeDisplay.textContent = volumeSlider.value + '%';
+    });
+}
 
 // Aktualizacja wyświetlania szybkości mówienia
-speechRateSlider.addEventListener('input', () => {
-  speechRateDisplay.textContent = speechRateSlider.value;
-});
+if(speechRateSlider && speechRateDisplay) {
+    speechRateSlider.addEventListener('input', () => {
+    speechRateDisplay.textContent = speechRateSlider.value;
+    });
+}
 
 // Zapisywanie ustawień
-saveSettingsBtn.addEventListener('click', async () => {
-  const settings = {
-    language: languageSelect.value,
-    volume: parseFloat(volumeSlider.value) / 100, // Konwertuj na 0-1 dla Python
-    speech_rate: parseInt(speechRateSlider.value)
-  };
+if(saveSettingsBtn) {
+    saveSettingsBtn.addEventListener('click', async () => {
+    const settings = {
+        language: languageSelect ? languageSelect.value : 'pl-PL',
+        volume: volumeSlider ? parseFloat(volumeSlider.value) / 100 : 1, // Konwertuj na 0-1 dla Python
+        speech_rate: speechRateSlider ? parseInt(speechRateSlider.value) : 150
+    };
 
-  try {
-    const response = await fetchWithTimeout(`${audioServiceUrl}/settings`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(settings)
-    }, 10000);
+    try {
+        const response = await fetchWithTimeout(`${audioServiceUrl}/settings`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(settings)
+        }, 10000);
 
-    if (!response.ok) {
-      const body = await response.text();
-      throw new Error(`Błąd serwera: ${response.status} ${body}`);
+        if (!response.ok) {
+        const body = await response.text();
+        throw new Error(`Błąd serwera: ${response.status} ${body}`);
+        }
+
+        const data = await response.json();
+        if (data.status === 'success') {
+        if(speechOutput) speechOutput.value += `\n✓ Ustawienia zapisane pomyślnie`;
+        // Zapisz również lokalnie
+        saveSettings({
+            language: settings.language,
+            volume: volumeSlider ? parseInt(volumeSlider.value) : 100, // Zachowaj jako procent dla UI
+            speechRate: settings.speech_rate
+        });
+        console.log('Ustawienia zapisane:', settings);
+        } else {
+        if(speechOutput) speechOutput.value += `\n✗ Błąd zapisywania ustawień: ${data.message}`;
+        }
+    } catch (error) {
+        if(speechOutput) speechOutput.value += `\n[Błąd zapisywania ustawień]: ${error.message}`;
+        console.error("Błąd /settings:", error);
     }
 
-    const data = await response.json();
-    if (data.status === 'success') {
-      speechOutput.value += `\n✓ Ustawienia zapisane pomyślnie`;
-      // Zapisz również lokalnie
-      saveSettings({
-        language: settings.language,
-        volume: parseInt(volumeSlider.value), // Zachowaj jako procent dla UI
-        speechRate: settings.speech_rate
-      });
-      console.log('Ustawienia zapisane:', settings);
-    } else {
-      speechOutput.value += `\n✗ Błąd zapisywania ustawień: ${data.message}`;
-    }
-  } catch (error) {
-    speechOutput.value += `\n[Błąd zapisywania ustawień]: ${error.message}`;
-    console.error("Błąd /settings:", error);
-  }
-
-  speechOutput.scrollTop = speechOutput.scrollHeight;
-});
+    if(speechOutput) speechOutput.scrollTop = speechOutput.scrollHeight;
+    });
+}
 
 // Inicjalizacja ustawień przy starcie aplikacji
 document.addEventListener('DOMContentLoaded', async () => {
+  // Zainicjuj listy urządzeń
+  enumerateMicrophones();
+  enumerateCameras();
+
   // Najpierw załaduj ustawienia lokalne jako fallback
   const localSettings = loadSettings();
   applySettingsToUI(localSettings);
@@ -593,13 +646,19 @@ document.addEventListener('DOMContentLoaded', async () => {
         saveSettings(serverSettings);
         applySettingsToUI(serverSettings);
         console.log('Ustawienia załadowane z serwera:', serverSettings);
-        speechOutput.value += `\n✓ Ustawienia załadowane z serwera`;
+        if(speechOutput) speechOutput.value += `\n✓ Ustawienia załadowane z serwera`;
       }
     }
   } catch (error) {
     console.log('Nie można załadować ustawień z serwera, używam lokalnych:', error.message);
-    speechOutput.value += `\n✓ Ustawienia załadowane lokalnie`;
+    if(speechOutput) speechOutput.value += `\n✓ Ustawienia załadowane lokalnie`;
   }
 
-  speechOutput.scrollTop = speechOutput.scrollHeight;
+  if(speechOutput) speechOutput.scrollTop = speechOutput.scrollHeight;
+});
+
+// Nasłuchuj zmian urządzeń multimedialnych (np. podłączenie/odłączenie kamery/mikrofonu)
+navigator.mediaDevices.addEventListener('devicechange', () => {
+    enumerateMicrophones();
+    enumerateCameras();
 });

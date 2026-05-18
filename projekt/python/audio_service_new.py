@@ -70,7 +70,7 @@ class VirtualTrainerAudioAPI:
         self.load_settings()
 
         # --- Locks i Wątki ---
-        self.audio_lock = threading.Lock()
+        self.audio_lock = threading.RLock()
         self.tts_queue = queue.Queue()
         self.tts_thread = threading.Thread(target=self._tts_worker, daemon=True)
         self.tts_thread.start()
@@ -87,9 +87,9 @@ class VirtualTrainerAudioAPI:
                 with open(settings_file, 'r', encoding='utf-8') as f:
                     loaded_settings = json.load(f)
                     self.settings.update(loaded_settings)
-                logger.info(f"Ustawienia załadowane: {self.settings}")
+                logger.info(f"Ustawienia zaladowane: {self.settings}")
         except Exception as e:
-            logger.exception("Błąd ładowania ustawień")
+            logger.exception("Blad ladowania ustawien")
 
     def save_settings(self):
         try:
@@ -98,7 +98,7 @@ class VirtualTrainerAudioAPI:
                 json.dump(self.settings, f, indent=2, ensure_ascii=False)
             logger.info(f"Ustawienia zapisane: {self.settings}")
         except Exception as e:
-            logger.exception("Błąd zapisywania ustawień")
+            logger.exception("Blad zapisywania ustawien")
 
     def update_settings(self, new_settings: Dict[str, Any]) -> Dict[str, Any]:
         try:
@@ -116,7 +116,7 @@ class VirtualTrainerAudioAPI:
 
             return {"status": "success", "message": "Ustawienia zaktualizowane", "settings": self.settings.copy()}
         except Exception as e:
-            logger.exception("Błąd aktualizacji ustawień")
+            logger.exception("Blad aktualizacji ustawien")
             return {"status": "error", "message": str(e)}
 
     def _apply_tts_settings(self):
@@ -127,7 +127,7 @@ class VirtualTrainerAudioAPI:
                 "rate": self.settings['speech_rate']
             })
         except Exception:
-            logger.exception("Błąd aplikowania ustawień TTS")
+            logger.exception("Blad aplikowania ustawien TTS")
 
     # =====================================================
     # KALIBRACJA
@@ -135,7 +135,7 @@ class VirtualTrainerAudioAPI:
     def calibrate_audio(self, duration: float = 2.0) -> Dict[str, Any]:
         with self.audio_lock:
             try:
-                logger.info(f"Rozpoczynam kalibrację dźwięku ({duration}s)...")
+                logger.info(f"Rozpoczynam kalibracje dzwieku ({duration}s)...")
                 with sr.Microphone() as source:
                     self.recognizer.adjust_for_ambient_noise(source, duration=duration)
                     self.ambient_noise_level = self.recognizer.energy_threshold
@@ -143,7 +143,7 @@ class VirtualTrainerAudioAPI:
                     self.recognizer.energy_threshold = min((self.ambient_noise_level + self.speech_threshold) / 2, 800)
 
                     self.calibrated = True
-                    logger.info("Kalibracja zakończona pomyślnie.")
+                    logger.info("Kalibracja zakonczona pomyslnie.")
                     return {
                         "status": "success",
                         "ambient_noise": self.ambient_noise_level,
@@ -151,7 +151,7 @@ class VirtualTrainerAudioAPI:
                         "energy_threshold": self.recognizer.energy_threshold
                     }
             except Exception as e:
-                logger.exception("Błąd podczas kalibracji")
+                logger.exception("Blad podczas kalibracji")
                 return {"status": "error", "message": str(e)}
 
     # =====================================================
@@ -245,26 +245,36 @@ class VirtualTrainerAudioAPI:
     def listen(self, timeout: int = 30, language: str = None, dynamic: bool = True) -> Dict[str, Any]:
         language = language or self.settings.get('language', 'pl-PL')
 
+        logger.info("[STT] Oczekuje na zwolnienie blokady audio...")
         with self.audio_lock:
             try:
                 if not self.calibrated:
+                    logger.info("[STT] Brak kalibracji, uruchamiam kalibracje...")
                     self.calibrate_audio(1.0)
 
+                logger.info("[STT] Probuje otworzyc strumien mikrofonu...")
                 with sr.Microphone() as source:
                     # Delikatne dostosowanie progu, ale bez nadpisywania głównej kalibracji
+
                     if self.recognizer.energy_threshold < self.ambient_noise_level * 1.2:
                         self.recognizer.energy_threshold = self.ambient_noise_level * 1.2
 
-                    logger.info("Rozpoczęto nasłuchiwanie...")
+                    logger.info(f"[STT] Mikrofon otwarty. Prog energii: {self.recognizer.energy_threshold}")
+
                     try:
+                        #wait_timeout = 10
+                        logger.info(f"[STT] Zaczynam nagrywac (max 10s)...")
+
                         audio = self.recognizer.listen(
                             source,
-                            timeout=5 if not dynamic else timeout,
-                            phrase_time_limit=timeout
+                            timeout=5,
+                            phrase_time_limit=10
                         )
 
-                        logger.info("Wysyłanie do Google...")
+                        logger.info("[STT] Wysylam zapytanie do serwerow Google...")
                         text = self.recognizer.recognize_google(audio, language=language)
+
+                        logger.info(f"[STT] Google zwrocilo wynik: '{text}'")
 
                         if self._is_valid_speech(text):
                             return {"status": "success", "text": text}
@@ -273,11 +283,14 @@ class VirtualTrainerAudioAPI:
                                     "message": "Wykryto dźwięk, ale nie rozpoznano jako mowa."}
 
                     except sr.WaitTimeoutError:
+                        logger.warning("[STT] Timeout - nikt nic nie powiedzial przez 5s.")
                         return {"status": "timeout", "message": "Brak mowy."}
                     except sr.UnknownValueError:
+                        logger.warning("[STT] Google nic nie zrozumialo (sam szum).")
                         return {"status": "no_speech", "message": "Nie zrozumiano."}
 
             except Exception as e:
+                logger.error(f"[STT] Blad krytyczny nasluchiwania: {str(e)}")
                 return {"status": "error", "message": str(e)}
 
     def _is_valid_speech(self, text: str) -> bool:

@@ -33,14 +33,18 @@
  *   },
  *   "cameras": {
  *     "front": {
+ *       "deviceId": "abc123...",   // ID urządzenia kamery (lub puste = domyślna)
  *       "enabled": true,
  *       "resolution": "1920x1080",
- *       "fps": 30
+ *       "fps": 30,
+ *       "ar_overlay": true         // Wyświetlaj punkty MediaPipe na wideo
  *     },
  *     "side": {
+ *       "deviceId": "def456...",
  *       "enabled": true,
  *       "resolution": "1280x720",
- *       "fps": 30
+ *       "fps": 30,
+ *       "ar_overlay": true         // Wyświetlaj punkty MediaPipe na wideo
  *     }
  *   },
  *   "exercise": {
@@ -112,6 +116,8 @@
  * @returns {Object} Pełna konfiguracja
  */
 function gatherConfiguration() {
+  const arOverlayEnabled = document.getElementById('ar-overlay-enabled')?.checked ?? true;
+  
   const config = {
     audio: {
       language: document.getElementById('language-select')?.value || 'pl-PL',
@@ -125,13 +131,15 @@ function gatherConfiguration() {
         deviceId: document.getElementById('camera-select-front')?.value || '',
         enabled: true,
         resolution: '1920x1080',
-        fps: 30
+        fps: 30,
+        ar_overlay: arOverlayEnabled
       },
       side: {
         deviceId: document.getElementById('camera-select-side')?.value || '',
         enabled: true,
         resolution: '1280x720',
-        fps: 30
+        fps: 30,
+        ar_overlay: arOverlayEnabled
       }
     },
     exercise: {
@@ -154,7 +162,7 @@ function gatherConfiguration() {
 }
 
 /**
- * Aktualizuje debug panel w HTML
+ * Aktualizuje debug panel w HTML   
  */
 function updateDebugPanel(config) {
   const debugPanel = document.getElementById('config-debug');
@@ -233,6 +241,7 @@ function attachConfigurationListeners() {
     // Cameras
     'camera-select-front',
     'camera-select-side',
+    'ar-overlay-enabled',
     // Exercise
     'difficulty-select',
     'duration-input',

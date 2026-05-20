@@ -30,7 +30,22 @@ def update_config():
           "microphone_id": 0,
           "enabled": true
         },
-        "cameras": {...},
+        "cameras": {
+          "front": {
+            "deviceId": "camera123...",
+            "enabled": true,
+            "resolution": "1920x1080",
+            "fps": 30,
+            "ar_overlay": true
+          },
+          "side": {
+            "deviceId": "camera456...",
+            "enabled": true,
+            "resolution": "1280x720",
+            "fps": 30,
+            "ar_overlay": true
+          }
+        },
         "exercise": {...},
         "calibration": {...}
       }
@@ -53,6 +68,11 @@ def update_config():
         
         if 'speechRate' in audio_config:
             audio_service.speech_rate = audio_config['speechRate']
+        
+        # Informacja: AR overlay settings przychodzą w cameras, ale mogą być użyte tutaj
+        cameras = config.get('cameras', {})
+        if cameras.get('front', {}).get('ar_overlay'):
+            logger.info("Front camera AR overlay enabled")
         
         logger.info(f"Config updated: {audio_config}")
         
@@ -129,11 +149,19 @@ async def handle_config_update(config):
     # Aktualizuj ustawienia MediaPipe
     if front_camera.get('enabled'):
         logger.info(f"Front camera: {front_camera.get('resolution')} @ {front_camera.get('fps')} FPS")
-        # Zaktualizuj front camera settings
+        # Wyświetlaj AR overlay (punkty anatomiczne) jeśli włączone
+        if front_camera.get('ar_overlay'):
+            logger.info("Front camera AR overlay ENABLED - pokaż punkty MediaPipe")
+        else:
+            logger.info("Front camera AR overlay DISABLED - ukryj punkty MediaPipe")
     
     if side_camera.get('enabled'):
         logger.info(f"Side camera: {side_camera.get('resolution')} @ {side_camera.get('fps')} FPS")
-        # Zaktualizuj side camera settings
+        # Wyświetlaj AR overlay (punkty anatomiczne) jeśli włączone
+        if side_camera.get('ar_overlay'):
+            logger.info("Side camera AR overlay ENABLED - pokaż punkty MediaPipe")
+        else:
+            logger.info("Side camera AR overlay DISABLED - ukryj punkty MediaPipe")
     
     # Wyodrębnij ćwiczenie
     exercise = config.get('exercise', {})
@@ -142,6 +170,7 @@ async def handle_config_update(config):
     # Wyodrębnij kalibrację
     calibration = config.get('calibration', {})
     logger.info(f"Auto-calibrate: {calibration.get('auto_calibrate')}")
+```
 ```
 
 ---
@@ -177,14 +206,18 @@ async def handle_config_update(config):
   },
   "cameras": {
     "front": {
+      "deviceId": "camera123...",  // ID urządzenia kamery
       "enabled": true,
       "resolution": "1920x1080",
-      "fps": 30
+      "fps": 30,
+      "ar_overlay": true            // Włącz wyświetlanie punktów MediaPipe
     },
     "side": {
+      "deviceId": "camera456...",
       "enabled": true,
       "resolution": "1280x720",
-      "fps": 30
+      "fps": 30,
+      "ar_overlay": true            // Włącz wyświetlanie punktów MediaPipe
     }
   },
   "exercise": {

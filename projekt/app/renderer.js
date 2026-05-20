@@ -1,6 +1,12 @@
 const { ipcRenderer } = require('electron');
 const audioServiceUrl = 'http://127.0.0.1:5000';
 
+// =========================================================
+// CONFIG SERVICE INTEGRATION
+// =========================================================
+// Załaduj config-service.js przed użyciem
+// Inicjalizacja po załadowaniu DOM (patrz na koniec pliku)
+
 // Flaga do zapobiegania jednoczesnym operacjom audio
 let isAudioOperationInProgress = false;
 
@@ -307,31 +313,69 @@ if(listenBtn && speechOutput) {
 
 
 // --- WYBÓR KAMERY ---
-const cameraSelect = document.getElementById('camera-select');
+const cameraSelectFront = document.getElementById('camera-select-front');
+const cameraSelectSide = document.getElementById('camera-select-side');
 
 async function enumerateCameras() {
-  if (!cameraSelect) return;
   try {
+    // 1. Poproś o permissje (wybudzi uśpione kamery na niektórych systemach)
+    try {
+      await navigator.mediaDevices.getUserMedia({ 
+        video: { width: 1, height: 1 }, 
+        audio: false 
+      }).then(stream => {
+        // Zamknij stream - był tylko do uaktywnienia kamer
+        stream.getTracks().forEach(track => track.stop());
+      });
+    } catch (e) {
+      // Ignoruj błędy permissji, spróbuj mimo to
+    }
+
+    // 2. Wylicz urządzenia
     const devices = await navigator.mediaDevices.enumerateDevices();
     const videoDevices = devices.filter(device => device.kind === 'videoinput');
 
-    cameraSelect.innerHTML = '';
+    console.log(`[Cameras] Znaleziono ${videoDevices.length} kamer:`);
+    videoDevices.forEach((d, i) => {
+      console.log(`  ${i + 1}. ${d.label || `Kamera ${i + 1}`} (${d.deviceId})`);
+    });
 
-    if (videoDevices.length === 0) {
-      cameraSelect.innerHTML = '<option value="">Brak dostępnych kamer</option>';
-      return;
-    }
+    // 3. Aktualizuj oba selekty
+    [cameraSelectFront, cameraSelectSide].forEach(select => {
+      if (!select) return;
+      
+      const currentValue = select.value;
+      select.innerHTML = '<option value="">-- Domyślna --</option>';
 
-    videoDevices.forEach((device, index) => {
-      const option = document.createElement('option');
-      option.value = device.deviceId;
-      option.textContent = device.label || `Kamera ${index + 1}`;
-      cameraSelect.appendChild(option);
+      if (videoDevices.length === 0) {
+        const option = document.createElement('option');
+        option.value = '';
+        option.textContent = 'Brak dostępnych kamer';
+        option.disabled = true;
+        select.appendChild(option);
+        return;
+      }
+
+      videoDevices.forEach((device, index) => {
+        const option = document.createElement('option');
+        option.value = device.deviceId;
+        option.textContent = device.label || `Kamera ${index + 1}`;
+        select.appendChild(option);
+      });
+
+      // Przywróć poprzednią wartość jeśli istnieje
+      if (currentValue && videoDevices.find(d => d.deviceId === currentValue)) {
+        select.value = currentValue;
+      }
     });
 
   } catch (error) {
-    console.error('Błąd przy pobieraniu listy kamer:', error);
-    cameraSelect.innerHTML = '<option value="">Błąd dostępu do kamer</option>';
+    console.error('❌ Błąd przy pobieraniu listy kamer:', error);
+    [cameraSelectFront, cameraSelectSide].forEach(select => {
+      if (select) {
+        select.innerHTML = '<option value="">Błąd dostępu do kamer</option>';
+      }
+    });
   }
 }
 
@@ -626,6 +670,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Zainicjuj listy urządzeń
   enumerateMicrophones();
   enumerateCameras();
+
+  // Inicjalizuj Config Service (zbieranie i wysyłanie konfiguracji)
+  if (typeof initializeConfigService === 'function') {
+    initializeConfigService();
+  }
 
   // Najpierw załaduj ustawienia lokalne jako fallback
   const localSettings = loadSettings();

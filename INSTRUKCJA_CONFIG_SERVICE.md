@@ -31,19 +31,17 @@ def update_config():
           "enabled": true
         },
         "cameras": {
+          "enabled": true,
+          "ar_overlay": true,
           "front": {
             "deviceId": "camera123...",
-            "enabled": true,
             "resolution": "1920x1080",
-            "fps": 30,
-            "ar_overlay": true
+            "fps": 30
           },
           "side": {
             "deviceId": "camera456...",
-            "enabled": true,
             "resolution": "1280x720",
-            "fps": 30,
-            "ar_overlay": true
+            "fps": 30
           }
         },
         "exercise": {...},
@@ -205,19 +203,17 @@ async def handle_config_update(config):
     "enabled": true           // Czy audio włączone
   },
   "cameras": {
+    "enabled": true,                // Włącz/wyłącz wszystkie kamery jednocześnie
+    "ar_overlay": true,             // Włącz wyświetlanie punktów MediaPipe dla kamer
     "front": {
       "deviceId": "camera123...",  // ID urządzenia kamery
-      "enabled": true,
       "resolution": "1920x1080",
-      "fps": 30,
-      "ar_overlay": true            // Włącz wyświetlanie punktów MediaPipe
+      "fps": 30
     },
     "side": {
       "deviceId": "camera456...",
-      "enabled": true,
       "resolution": "1280x720",
-      "fps": 30,
-      "ar_overlay": true            // Włącz wyświetlanie punktów MediaPipe
+      "fps": 30
     }
   },
   "exercise": {

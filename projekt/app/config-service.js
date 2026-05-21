@@ -32,19 +32,17 @@
  *     "enabled": true             // Czy audio włączone
  *   },
  *   "cameras": {
+ *     "enabled": true,              // Globalny switch dla kamer (front + side)
+ *     "ar_overlay": true,           // Globalny toggle overlay MediaPipe dla wszystkich kamer
  *     "front": {
  *       "deviceId": "abc123...",   // ID urządzenia kamery (lub puste = domyślna)
- *       "enabled": true,
  *       "resolution": "1920x1080",
- *       "fps": 30,
- *       "ar_overlay": true         // Wyświetlaj punkty MediaPipe na wideo
+ *       "fps": 30
  *     },
  *     "side": {
  *       "deviceId": "def456...",
- *       "enabled": true,
  *       "resolution": "1280x720",
- *       "fps": 30,
- *       "ar_overlay": true         // Wyświetlaj punkty MediaPipe na wideo
+ *       "fps": 30
  *     }
  *   },
  *   "exercise": {
@@ -117,6 +115,8 @@
  */
 function gatherConfiguration() {
   const arOverlayEnabled = document.getElementById('ar-overlay-enabled')?.checked ?? true;
+  const cameraPreview = document.getElementById('camera');
+  const camerasEnabled = cameraPreview ? !cameraPreview.classList.contains('hidden') : true;
   
   const config = {
     audio: {
@@ -127,19 +127,17 @@ function gatherConfiguration() {
       enabled: true
     },
     cameras: {
+      enabled: camerasEnabled,
+      ar_overlay: arOverlayEnabled,
       front: {
         deviceId: document.getElementById('camera-select-front')?.value || '',
-        enabled: true,
         resolution: '1920x1080',
-        fps: 30,
-        ar_overlay: arOverlayEnabled
+        fps: 30
       },
       side: {
         deviceId: document.getElementById('camera-select-side')?.value || '',
-        enabled: true,
         resolution: '1280x720',
-        fps: 30,
-        ar_overlay: arOverlayEnabled
+        fps: 30
       }
     },
     exercise: {

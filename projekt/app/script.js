@@ -41,6 +41,13 @@ document.addEventListener('DOMContentLoaded', () => {
             toggleCameraBtn.style.color = 'var(--text-dark)';
             toggleCameraBtn.style.borderColor = 'var(--c3)';
         }
+
+        if (typeof gatherConfiguration === 'function' && typeof sendConfigToProcesses === 'function') {
+            const config = gatherConfiguration();
+            sendConfigToProcesses(config).catch(error => {
+                console.warn('[ConfigService] ❌ Błąd synchronizacji po toggle kamery:', error);
+            });
+        }
         });
     }
 

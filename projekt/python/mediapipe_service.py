@@ -34,17 +34,30 @@ class Config:
         self.restart = False
 
     def apply(self, p: dict):
-        f, e = p.get("cameras", {}).get("front", {}), p.get("exercise", {})
+        cameras = p.get("cameras", {})
+        f = cameras.get("front", {})
         with self.lock:
-            self.cam_en = bool(f.get("enabled", self.cam_en))
-            self.ar = bool(f.get("ar_overlay", self.ar))
-            if "fps" in f: self.cam_fps = self.pts_fps = int(f["fps"])
+            self.cam_en = bool(cameras.get("enabled", self.cam_en))
+            self.ar = bool(cameras.get("ar_overlay", self.ar))
+            if "fps" in f:
+                self.cam_fps = self.pts_fps = int(f["fps"])
             try:
                 if "resolution" in f:
                     nw, nh = map(int, f["resolution"].split("x"))
-                    if (nw, nh) != (self.w, self.h): self.w, self.h, self.restart = nw, nh, True
-                if "deviceId" in f and int(f["deviceId"]) != self.cam_idx:
-                    self.cam_idx, self.restart = int(f["deviceId"]), True
+                    if (nw, nh) != (self.w, self.h):
+                        self.w, self.h, self.restart = nw, nh, True
+
+                if "deviceId" in f:
+                    device_id = f["deviceId"]
+                    if isinstance(device_id, int):
+                        new_idx = device_id
+                    elif isinstance(device_id, str) and device_id.isdigit():
+                        new_idx = int(device_id)
+                    else:
+                        new_idx = None
+
+                    if new_idx is not None and new_idx != self.cam_idx:
+                        self.cam_idx, self.restart = new_idx, True
             except (ValueError, TypeError):
                 pass
 
@@ -165,6 +178,7 @@ async def ws_handler(ws):
                 msg = json.loads(raw)
                 if msg.get("type") == "config":
                     config.apply(msg.get("payload", {}))
+                    print(f"Updated config: {config.snapshot()}", flush=True)
                     await ws.send(json.dumps({"type": "config_ack", "status": "success"}))
             except:
                 pass

@@ -319,17 +319,18 @@ const cameraSelectSide = document.getElementById('camera-select-side');
 async function enumerateCameras() {
   try {
     // 1. Poproś o permissje (wybudzi uśpione kamery na niektórych systemach)
-    try {
-      await navigator.mediaDevices.getUserMedia({ 
-        video: { width: 1, height: 1 }, 
-        audio: false 
-      }).then(stream => {
-        // Zamknij stream - był tylko do uaktywnienia kamer
-        stream.getTracks().forEach(track => track.stop());
-      });
-    } catch (e) {
-      // Ignoruj błędy permissji, spróbuj mimo to
-    }
+    // No więc ten kod generalnie zwieszał cv2 próbujące dostać się do kamery urządzenia (chyba?)
+//    try {
+//      await navigator.mediaDevices.getUserMedia({
+//        video: { width: 1, height: 1 },
+//        audio: false
+//      }).then(stream => {
+//        // Zamknij stream - był tylko do uaktywnienia kamer
+//        stream.getTracks().forEach(track => track.stop());
+//      });
+//    } catch (e) {
+//      // Ignoruj błędy permissji, spróbuj mimo to
+//    }
 
     // 2. Wylicz urządzenia
     const devices = await navigator.mediaDevices.enumerateDevices();

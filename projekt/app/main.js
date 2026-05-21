@@ -1,8 +1,9 @@
-const { app, BrowserWindow } = require('electron');
+const { app, BrowserWindow, ipcMain } = require('electron');
 const WebSocket = require('ws');
 const { spawn, spawnSync } = require('child_process');
 const net = require('net');
 const path = require('path');
+const http = require('http');
 
 
 let mediapipeProcess;
@@ -219,6 +220,7 @@ function connect() {
 
   ws.on('open', () => {
     console.log('Connected');
+    global.mediapipeWS = ws; // Zapamiętaj WebSocket globalnie do wysyłania config
   });
 
   ws.on('error', () => {
@@ -233,6 +235,102 @@ function connect() {
       win.webContents.send('mediapipe-data', parsed);
     }
   });
+}
+
+// =========================================================
+// IPC HANDLERS - Obsługa wiadomości z renderer.js
+// =========================================================
+
+/**
+ * Odbiera konfigurację z config-service.js i wysyła do Python procesów
+ * 
+ * Format: { "audio": {...}, "cameras": {...}, "exercise": {...} }
+ */
+ipcMain.handle('send-config', async (event, config) => {
+  console.log('[Main IPC] Otrzymana konfiguracja z config-service.js');
+  
+  try {
+    // 1. Wyślij do Audio Service (Flask :5000/api/config)
+    const audioConfig = config.audio || {};
+    if (Object.keys(audioConfig).length > 0) {
+      await sendConfigToAudioService(config);
+    }
+    
+    // 2. Wyślij do MediaPipe (WebSocket :8765)
+    await sendConfigToMediaPipe(config);
+    
+    return { status: 'success', message: 'Konfiguracja wysłana do procesów Python' };
+  } catch (error) {
+    console.error('[Main IPC] Błąd:', error.message);
+    return { status: 'error', message: error.message };
+  }
+});
+
+/**
+ * Wysyła konfigurację do Audio Service (Flask)
+ */
+async function sendConfigToAudioService(config) {
+  return new Promise((resolve, reject) => {
+    const jsonData = JSON.stringify({ config });
+    
+    const options = {
+      hostname: '127.0.0.1',
+      port: 5000,
+      path: '/api/config',
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(jsonData)
+      },
+      timeout: 5000
+    };
+
+    const req = http.request(options, (res) => {
+      let data = '';
+      res.on('data', (chunk) => { data += chunk; });
+      res.on('end', () => {
+        console.log(`[Main] Audio Service POST /api/config: ${res.statusCode}`);
+        resolve();
+      });
+    });
+
+    req.on('error', (error) => {
+      console.warn(`[Main] Błąd wysyłania do Audio Service: ${error.message}`);
+      resolve(); // Nie przerywaj jeśli audio service niedostępny
+    });
+
+    req.on('timeout', () => {
+      req.destroy();
+      console.warn('[Main] Audio Service timeout');
+      resolve();
+    });
+
+    req.write(jsonData);
+    req.end();
+  });
+}
+
+/**
+ * Wysyła konfigurację do MediaPipe (WebSocket)
+ */
+async function sendConfigToMediaPipe(config) {
+  // Przechowuj globalny WebSocket do MediaPipe
+  if (!global.mediapipeWS || global.mediapipeWS.readyState !== WebSocket.OPEN) {
+    console.warn('[Main] MediaPipe WebSocket nie jest otwarty');
+    return;
+  }
+
+  const message = {
+    type: 'config',
+    payload: config
+  };
+
+  try {
+    global.mediapipeWS.send(JSON.stringify(message));
+    console.log('[Main] Konfiguracja wysłana do MediaPipe');
+  } catch (error) {
+    console.error('[Main] Błąd wysyłania do MediaPipe:', error.message);
+  }
 }
 
 app.whenReady().then(createWindow);

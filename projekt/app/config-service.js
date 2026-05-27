@@ -115,9 +115,21 @@
  */
 function gatherConfiguration() {
   const arOverlayEnabled = document.getElementById('ar-overlay-enabled')?.checked ?? true;
-  const cameraPreview = document.getElementById('camera');
-  const camerasEnabled = cameraPreview ? !cameraPreview.classList.contains('hidden') : true;
+  const frontPreview = document.getElementById('camera');
+  const sidePreview = document.getElementById('camera-side');
+  const frontVisible = frontPreview ? !frontPreview.classList.contains('hidden') : true;
+  const sideVisible = sidePreview ? !sidePreview.classList.contains('hidden') : true;
+  const camerasEnabled = frontVisible || sideVisible;
   
+  const frontSelect = document.getElementById('camera-select-front');
+  const sideSelect = document.getElementById('camera-select-side');
+  const frontOption = frontSelect?.selectedOptions?.[0];
+  const sideOption = sideSelect?.selectedOptions?.[0];
+  const frontDeviceId = frontOption?.dataset.deviceId || frontSelect?.value || '';
+  const sideDeviceId = sideOption?.dataset.deviceId || sideSelect?.value || '';
+  const frontLabel = frontOption?.textContent || '';
+  const sideLabel = sideOption?.textContent || '';
+
   const config = {
     audio: {
       language: document.getElementById('language-select')?.value || 'pl-PL',
@@ -130,13 +142,15 @@ function gatherConfiguration() {
       enabled: camerasEnabled,
       ar_overlay: arOverlayEnabled,
       front: {
-        deviceId: document.getElementById('camera-select-front')?.value || '',
+        deviceId: frontDeviceId,
+        deviceLabel: frontLabel,
         resolution: '1920x1080',
         fps: 30
       },
       side: {
-        deviceId: document.getElementById('camera-select-side')?.value || '',
-        resolution: '1280x720',
+        deviceId: sideDeviceId,
+        deviceLabel: sideLabel,
+        resolution: '1920x1080',
         fps: 30
       }
     },
@@ -240,6 +254,7 @@ function attachConfigurationListeners() {
     'camera-select-front',
     'camera-select-side',
     'ar-overlay-enabled',
+    'toggle-camera-btn',
     // Exercise
     'difficulty-select',
     'duration-input',
@@ -256,6 +271,15 @@ function attachConfigurationListeners() {
           console.warn('[ConfigService] ❌ Błąd synchronizacji:', error);
         });
       });
+
+      if (id === 'camera-select-front' || id === 'camera-select-side') {
+        element.addEventListener('input', () => {
+          const config = gatherConfiguration();
+          sendConfigToProcesses(config).catch(error => {
+            console.warn('[ConfigService] ❌ Błąd synchronizacji kamery:', error);
+          });
+        });
+      }
       
       // Dla sliderów - aktualizuj również przy input event (real-time)
       if (id.includes('slider')) {

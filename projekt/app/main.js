@@ -201,11 +201,12 @@ async function createWindow() {
 
   // Handle microphone permission requests
   win.webContents.session.setPermissionRequestHandler((webContents, permission, callback) => {
-    if (permission === 'media') {
+    if (['media', 'camera', 'microphone'].includes(permission)) {
       callback(true);
-    } else {
-      callback(false);
+      return;
     }
+
+    callback(false);
   });
 
   win.loadFile('index.html');
@@ -229,11 +230,18 @@ function connect() {
   });
 
   ws.on('message', (data) => {
-    // Sprawdzamy, czy okno istnieje i czy nie zostało zniszczone
-    if (win && !win.isDestroyed()) {
-      const parsed = JSON.parse(data);
-      win.webContents.send('mediapipe-data', parsed);
+    if (!win || win.isDestroyed()) return;
+
+    const parsed = JSON.parse(data);
+
+    // Lista kamer z Pythona – wysyłamy osobnym kanałem IPC
+    if (parsed.type === 'cameras_list') {
+      win.webContents.send('cameras-list', parsed.payload);
+      return;
     }
+
+    // Pozostałe dane (image, points, itp.)
+    win.webContents.send('mediapipe-data', parsed);
   });
 }
 

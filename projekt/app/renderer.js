@@ -66,23 +66,96 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 45000) {
   }
 }
 
+function updateCameraPreview(elementId, imageBase64, placeholderId) {
+  const img = document.getElementById(elementId);
+  const placeholder = placeholderId ? document.getElementById(placeholderId) : null;
+
+  if (img) {
+    if (imageBase64) {
+      img.src = 'data:image/jpeg;base64,' + imageBase64;
+      img.classList.remove('hidden');
+      if (placeholder) placeholder.classList.add('hidden');
+    } else {
+      img.classList.add('hidden');
+      if (placeholder) placeholder.classList.remove('hidden');
+    }
+  }
+}
+
 ipcRenderer.on('mediapipe-data', (event, data) => {
   console.log('Received from Python:', data);
 
-  if (data.image) {
-    document.getElementById('camera').src = 'data:image/jpeg;base64,' + data.image;
-    // Opcjonalnie: jeśli masz oddzielny feed z side kamery
-    // document.getElementById('camera-side').src = 'data:image/jpeg;base64,' + data.imageSide;
+  if (data.image || data.imageSide) {
+    updateCameraPreview('camera', data.image, 'camera-placeholder');
+    updateCameraPreview('camera-side', data.imageSide, 'camera-placeholder-side');
   } else {
-    // W tej uproszczonej wersji logi lądują w textarea
     const output = document.getElementById('output');
-    output.innerText += '\n' + JSON.stringify(data);
-    output.scrollTop = output.scrollHeight;
+    if (output) {
+      output.innerText += '\n' + JSON.stringify(data);
+      output.scrollTop = output.scrollHeight;
+    }
   }
 });
 
+ipcRenderer.on('cameras-list', async (event, cameraList) => {
+  console.log('[Renderer] Received camera list from Python:', cameraList);
+
+  try {
+    const browserDevices = await navigator.mediaDevices.enumerateDevices();
+    const videoDevices = browserDevices.filter(device => device.kind === 'videoinput');
+
+    lastPythonCameraList = Array.isArray(cameraList) ? cameraList : [];
+    lastBrowserDevices = videoDevices;
+    populateCameraSelects(lastPythonCameraList, lastBrowserDevices);
+  } catch (error) {
+    console.warn('[Renderer] Nie udało się odczytać nazw kamer z przeglądarki:', error);
+    lastPythonCameraList = Array.isArray(cameraList) ? cameraList : [];
+    lastBrowserDevices = [];
+    populateCameraSelects(lastPythonCameraList, lastBrowserDevices);
+  }
+});
+
+const toggleCameraBtn = document.getElementById('toggle-camera-btn');
 const speakBtn = document.getElementById('speak-btn');
 const speechOutput = document.getElementById('speech-output');
+
+function areAnyCamerasVisible() {
+  const frontImg = document.getElementById('camera');
+  const sideImg = document.getElementById('camera-side');
+
+  return Boolean(frontImg && !frontImg.classList.contains('hidden')) || Boolean(sideImg && !sideImg.classList.contains('hidden'));
+}
+
+function setCameraVisibility(visible) {
+  const frontImg = document.getElementById('camera');
+  const sideImg = document.getElementById('camera-side');
+  const frontPlaceholder = document.getElementById('camera-placeholder');
+  const sidePlaceholder = document.getElementById('camera-placeholder-side');
+
+  if (frontImg) frontImg.classList.toggle('hidden', !visible);
+  if (sideImg) sideImg.classList.toggle('hidden', !visible);
+  if (frontPlaceholder) frontPlaceholder.classList.toggle('hidden', visible);
+  if (sidePlaceholder) sidePlaceholder.classList.toggle('hidden', visible);
+
+  if (toggleCameraBtn) {
+    toggleCameraBtn.textContent = visible ? 'Ukryj kamerę' : 'Pokaż kamerę';
+  }
+}
+
+if (toggleCameraBtn) {
+  toggleCameraBtn.addEventListener('click', () => {
+    const nextVisible = !areAnyCamerasVisible();
+    setCameraVisibility(nextVisible);
+
+    if (typeof gatherConfiguration === 'function' && typeof sendConfigToProcesses === 'function') {
+      const config = gatherConfiguration();
+      config.cameras.enabled = nextVisible;
+      sendConfigToProcesses(config).catch(error => {
+        console.warn('[Renderer] Błąd synchronizacji stanu kamery:', error);
+      });
+    }
+  });
+}
 
 //obsluga przycisku czytania (text to speech)
 if(speakBtn && speechOutput) {
@@ -315,60 +388,100 @@ if(listenBtn && speechOutput) {
 // --- WYBÓR KAMERY ---
 const cameraSelectFront = document.getElementById('camera-select-front');
 const cameraSelectSide = document.getElementById('camera-select-side');
+let lastPythonCameraList = [];
+let lastBrowserDevices = [];
+
+function attachCameraSelectSync() {
+  [cameraSelectFront, cameraSelectSide].forEach(select => {
+    if (!select) return;
+    select.addEventListener('change', () => syncCameraConfig());
+    select.addEventListener('input', () => syncCameraConfig());
+  });
+}
+
+function syncCameraConfig() {
+  if (typeof gatherConfiguration === 'function' && typeof sendConfigToProcesses === 'function') {
+    const config = gatherConfiguration();
+    sendConfigToProcesses(config).catch(error => {
+      console.warn('[Renderer] Błąd synchronizacji kamer:', error);
+    });
+  }
+}
+
+/**
+ * Wypełnia selecty kamer na podstawie listy z Pythona
+ * Wywołaj po otrzymaniu wiadomości type: "cameras_list"
+ */
+function populateCameraSelects(cameraList = [], browserDevices = []) {
+  const selects = [
+    document.getElementById('camera-select-front'),
+    document.getElementById('camera-select-side')
+  ];
+
+  const pythonItems = Array.isArray(cameraList) && cameraList.length > 0
+    ? cameraList
+    : browserDevices.map((device, index) => ({ index, name: device.label || `Kamera ${index + 1}`, deviceId: device.deviceId }));
+
+  const items = pythonItems.map((cam, fallbackIndex) => {
+    const index = Number(cam.index ?? cam.deviceId ?? fallbackIndex ?? 0);
+    const browserDevice = browserDevices.find((device) => device.deviceId === cam.deviceId)
+      || browserDevices.find((device) => device.label === (cam.label || cam.name))
+      || browserDevices[index]
+      || null;
+
+    return {
+      index,
+      name: browserDevice?.label || cam.name || cam.label || `Kamera ${index + 1}`,
+      deviceId: browserDevice?.deviceId || cam.deviceId || String(index)
+    };
+  });
+
+  selects.forEach(select => {
+    if (!select) return;
+
+    const currentValue = select.value || '';
+    select.innerHTML = '<option value="">-- Domyślna --</option>';
+
+    items.forEach(cam => {
+      const option = document.createElement('option');
+      option.value = cam.deviceId || String(cam.index);
+      option.textContent = cam.name;
+      option.dataset.deviceId = cam.deviceId || String(cam.index);
+      option.dataset.index = String(cam.index);
+      select.appendChild(option);
+    });
+
+    const hasCurrent = currentValue && [...select.options].some(o => o.value === currentValue || o.dataset.deviceId === currentValue);
+    if (hasCurrent) {
+      select.value = currentValue;
+    } else if (items.length > 0) {
+      select.value = items[0].deviceId || String(items[0].index);
+    }
+  });
+
+  console.log('[Renderer] ✓ Selecty kamer zaktualizowane:', items);
+}
 
 async function enumerateCameras() {
   try {
-    // 1. Poproś o permissje (wybudzi uśpione kamery na niektórych systemach)
-    // No więc ten kod generalnie zwieszał cv2 próbujące dostać się do kamery urządzenia (chyba?)
-//    try {
-//      await navigator.mediaDevices.getUserMedia({
-//        video: { width: 1, height: 1 },
-//        audio: false
-//      }).then(stream => {
-//        // Zamknij stream - był tylko do uaktywnienia kamer
-//        stream.getTracks().forEach(track => track.stop());
-//      });
-//    } catch (e) {
-//      // Ignoruj błędy permissji, spróbuj mimo to
-//    }
-
-    // 2. Wylicz urządzenia
     const devices = await navigator.mediaDevices.enumerateDevices();
     const videoDevices = devices.filter(device => device.kind === 'videoinput');
+
+    lastBrowserDevices = videoDevices;
 
     console.log(`[Cameras] Znaleziono ${videoDevices.length} kamer:`);
     videoDevices.forEach((d, i) => {
       console.log(`  ${i + 1}. ${d.label || `Kamera ${i + 1}`} (${d.deviceId})`);
     });
 
-    // 3. Aktualizuj oba selekty
-    [cameraSelectFront, cameraSelectSide].forEach(select => {
-      if (!select) return;
-      
-      const currentValue = select.value;
-      select.innerHTML = '<option value="">-- Domyślna --</option>';
+    populateCameraSelects(lastPythonCameraList.length ? lastPythonCameraList : videoDevices.map((device, index) => ({
+      index,
+      name: device.label || `Kamera ${index + 1}`,
+      deviceId: device.deviceId,
+      label: device.label || `Kamera ${index + 1}`
+    })), videoDevices);
 
-      if (videoDevices.length === 0) {
-        const option = document.createElement('option');
-        option.value = '';
-        option.textContent = 'Brak dostępnych kamer';
-        option.disabled = true;
-        select.appendChild(option);
-        return;
-      }
-
-      videoDevices.forEach((device, index) => {
-        const option = document.createElement('option');
-        option.value = device.deviceId;
-        option.textContent = device.label || `Kamera ${index + 1}`;
-        select.appendChild(option);
-      });
-
-      // Przywróć poprzednią wartość jeśli istnieje
-      if (currentValue && videoDevices.find(d => d.deviceId === currentValue)) {
-        select.value = currentValue;
-      }
-    });
+    syncCameraConfig();
 
   } catch (error) {
     console.error('❌ Błąd przy pobieraniu listy kamer:', error);
@@ -668,6 +781,8 @@ if(saveSettingsBtn) {
 
 // Inicjalizacja ustawień przy starcie aplikacji
 document.addEventListener('DOMContentLoaded', async () => {
+  attachCameraSelectSync();
+
   // Zainicjuj listy urządzeń
   enumerateMicrophones();
   enumerateCameras();

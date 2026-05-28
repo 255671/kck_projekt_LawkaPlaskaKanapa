@@ -22,8 +22,20 @@ POSE_CONNECTIONS = [(0, 1), (1, 2), (2, 3), (3, 7), (0, 4), (4, 5), (5, 6), (6, 
 # ---------------------------------------------------------------------------
 # SHARED STATE & CONFIG
 # ---------------------------------------------------------------------------
-state = {"frame_front": None, "frame_side": None, "points_front": None, "ts_ms": 0}
-locks = {"frame_front": threading.Lock(), "frame_side": threading.Lock(), "points_front": threading.Lock()}
+state = {
+    "frame_front": None,
+    "frame_side": None,
+    "points_front": None,
+    "points_side": None,
+    "ts_ms_front": 0,
+    "ts_ms_side": 0,
+}
+locks = {
+    "frame_front": threading.Lock(),
+    "frame_side": threading.Lock(),
+    "points_front": threading.Lock(),
+    "points_side": threading.Lock(),
+}
 
 
 class Config:
@@ -175,7 +187,8 @@ def camera_thread_fn():
 
 def inference_thread_fn():
     try:
-        lm = get_landmarker()
+        lm_front = get_landmarker()
+        lm_side = get_landmarker()
     except Exception as e:
         print(e); return
 
@@ -184,18 +197,38 @@ def inference_thread_fn():
         time.sleep(1.0 / max(1, cfg["pts_fps"]))
 
         with locks["frame_front"]:
-            f = state["frame_front"]
-        if f is None: continue
+            f_front = state["frame_front"]
+        with locks["frame_side"]:
+            f_side = state["frame_side"]
 
-        mp_img = mp.Image(image_format=mp.ImageFormat.SRGB, data=cv2.cvtColor(f.copy(), cv2.COLOR_BGR2RGB))
-        state["ts_ms"] += int(1000 / max(1, cfg["pts_fps"]))
+        if f_front is None and f_side is None:
+            continue
 
-        try:
-            res = lm.detect_for_video(mp_img, state["ts_ms"])
-            with locks["points_front"]:
-                state["points_front"] = res.pose_landmarks[0] if res.pose_landmarks else None
-        except Exception as e:
-            print(f"Inference err: {e}")
+        if f_front is not None:
+            try:
+                mp_img_front = mp.Image(
+                    image_format=mp.ImageFormat.SRGB,
+                    data=cv2.cvtColor(f_front.copy(), cv2.COLOR_BGR2RGB),
+                )
+                state["ts_ms_front"] += int(1000 / max(1, cfg["pts_fps"]))
+                res_front = lm_front.detect_for_video(mp_img_front, state["ts_ms_front"])
+                with locks["points_front"]:
+                    state["points_front"] = res_front.pose_landmarks[0] if res_front.pose_landmarks else None
+            except Exception as e:
+                print(f"Inference err (front): {e}")
+
+        if f_side is not None:
+            try:
+                mp_img_side = mp.Image(
+                    image_format=mp.ImageFormat.SRGB,
+                    data=cv2.cvtColor(f_side.copy(), cv2.COLOR_BGR2RGB),
+                )
+                state["ts_ms_side"] += int(1000 / max(1, cfg["pts_fps"]))
+                res_side = lm_side.detect_for_video(mp_img_side, state["ts_ms_side"])
+                with locks["points_side"]:
+                    state["points_side"] = res_side.pose_landmarks[0] if res_side.pose_landmarks else None
+            except Exception as e:
+                print(f"Inference err (side): {e}")
 
 
 # ---------------------------------------------------------------------------
@@ -219,20 +252,23 @@ async def ws_handler(ws):
             with locks["frame_side"]:
                 f_side = state["frame_side"]
             with locks["points_front"]:
-                pts = state["points_front"]
+                pts_front = state["points_front"]
+            with locks["points_side"]:
+                pts_side = state["points_side"]
             if f_front is None and f_side is None:
                 continue
 
             b64_front = None
             pts_data = None
             if f_front is not None:
-                img = draw_landmarks(f_front, pts) if cfg["ar"] else f_front
+                img = draw_landmarks(f_front, pts_front) if cfg["ar"] else f_front
                 b64_front = base64.b64encode(cv2.imencode('.jpg', img)[1]).decode('utf-8')
-                pts_data = [{"x": p.x, "y": p.y, "z": p.z, "v": getattr(p, 'visibility', 0)} for p in pts] if pts else None
+                pts_data = [{"x": p.x, "y": p.y, "z": p.z, "v": getattr(p, 'visibility', 0)} for p in pts_front] if pts_front else None
 
             b64_side = None
             if f_side is not None:
-                b64_side = base64.b64encode(cv2.imencode('.jpg', f_side)[1]).decode('utf-8')
+                img_side = draw_landmarks(f_side, pts_side) if cfg["ar"] else f_side
+                b64_side = base64.b64encode(cv2.imencode('.jpg', img_side)[1]).decode('utf-8')
 
             try:
                 await ws.send(json.dumps({"image": b64_front, "imageSide": b64_side, "points": pts_data}))

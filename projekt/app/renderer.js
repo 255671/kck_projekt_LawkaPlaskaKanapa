@@ -74,6 +74,38 @@ ipcRenderer.on('mediapipe-data', (event, data) => {
     if (data.imageSide) {
       document.getElementById('camera-side').src = 'data:image/jpeg;base64,' + data.imageSide;
     }
+
+    // UI: licznik powtórzeń
+    try {
+      const repCountEl = document.getElementById('rep-count');
+      const repPhaseEl = document.getElementById('rep-phase');
+      if (repCountEl && data.exercise && typeof data.exercise.repCount === 'number') {
+        repCountEl.textContent = String(data.exercise.repCount);
+      }
+      if (repPhaseEl && data.exercise && typeof data.exercise.phase === 'string') {
+        repPhaseEl.textContent = data.exercise.phase || '--';
+      }
+    } catch {
+      // ignore
+    }
+
+    // Debug: wypisz wykrywanie ćwiczenia do logów (z throttlingiem)
+    try {
+      const output = document.getElementById('output');
+      if (output && data.exercise && typeof data.exercise.repCount === 'number') {
+        const now = Date.now();
+        if (!window.__lastExerciseLogAt) window.__lastExerciseLogAt = 0;
+        if ((now - window.__lastExerciseLogAt) > 1000) {
+          window.__lastExerciseLogAt = now;
+          const m = data.exercise.metrics;
+          const metricText = m ? ` angle=${m.kneeAngle} leg=${m.leg}` : '';
+          output.innerText += `\n[Exercise] ${data.exercise.name} reps=${data.exercise.repCount} phase=${data.exercise.phase}${metricText}`;
+          output.scrollTop = output.scrollHeight;
+        }
+      }
+    } catch {
+      // ignore
+    }
   } else {
     // W tej uproszczonej wersji logi lądują w textarea
     const output = document.getElementById('output');

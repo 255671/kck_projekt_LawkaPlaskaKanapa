@@ -37,6 +37,101 @@ locks = {
     "points_side": threading.Lock(),
 }
 
+# ---------------------------------------------------------------------------
+# EXERCISE DETECTION (Bulgarian split squat) - heuristic
+# ---------------------------------------------------------------------------
+exercise_state = {
+    "enabled": True,
+    "name": "bulgarian_squat",
+    "repCount": 0,
+    "phase": "unknown",  # up | down | unknown
+    "lastKneeAngle": None,
+    "downFrames": 0,
+    "upFrames": 0,
+}
+
+
+def _angle_deg(a, b, c) -> float:
+    # angle ABC in degrees where points are (x,y)
+    import math
+    bax = a[0] - b[0]
+    bay = a[1] - b[1]
+    bcx = c[0] - b[0]
+    bcy = c[1] - b[1]
+    dot = bax * bcx + bay * bcy
+    n1 = math.hypot(bax, bay)
+    n2 = math.hypot(bcx, bcy)
+    if n1 == 0.0 or n2 == 0.0:
+        return float("nan")
+    cosv = max(-1.0, min(1.0, dot / (n1 * n2)))
+    return math.degrees(math.acos(cosv))
+
+
+def knee_angle_from_pts(pts):
+    """
+    Zwraca (angle_deg, side) dla bardziej 'zgiętej' nogi (mniejszy kąt kolana).
+    Landmarks: hip(23/24), knee(25/26), ankle(27/28).
+    """
+    if not pts or len(pts) < 29:
+        return None, None
+
+    def pick(hip_i, knee_i, ankle_i):
+        hip = pts[hip_i]
+        knee = pts[knee_i]
+        ankle = pts[ankle_i]
+        v_ok = (getattr(hip, "visibility", 0) or 0) > 0.5 and (getattr(knee, "visibility", 0) or 0) > 0.5 and (getattr(ankle, "visibility", 0) or 0) > 0.5
+        if not v_ok:
+            return None
+        return _angle_deg((hip.x, hip.y), (knee.x, knee.y), (ankle.x, ankle.y))
+
+    left = pick(23, 25, 27)
+    right = pick(24, 26, 28)
+    candidates = [(left, "left"), (right, "right")]
+    candidates = [(a, s) for (a, s) in candidates if a is not None and a == a]  # a==a filters NaN
+    if not candidates:
+        return None, None
+    # smaller angle => deeper bend
+    return sorted(candidates, key=lambda x: x[0])[0]
+
+
+def update_bulgarian_squat(pts_prefer_side, pts_fallback_front):
+    """
+    Prosty licznik powtórzeń na bazie kąta kolana.
+    - down gdy kąt < 115 przez kilka klatek
+    - up gdy kąt > 160 przez kilka klatek po 'down'
+    """
+    pts = pts_prefer_side if pts_prefer_side else pts_fallback_front
+    angle, which = knee_angle_from_pts(pts)
+    if angle is None:
+        exercise_state["phase"] = "unknown"
+        exercise_state["lastKneeAngle"] = None
+        exercise_state["downFrames"] = 0
+        exercise_state["upFrames"] = 0
+        return None
+
+    exercise_state["lastKneeAngle"] = angle
+    down_th = 115.0
+    up_th = 160.0
+    need_frames = 3
+
+    if angle < down_th:
+        exercise_state["downFrames"] += 1
+        exercise_state["upFrames"] = 0
+        if exercise_state["downFrames"] >= need_frames:
+            exercise_state["phase"] = "down"
+    elif angle > up_th:
+        exercise_state["upFrames"] += 1
+        exercise_state["downFrames"] = 0
+        if exercise_state["upFrames"] >= need_frames:
+            if exercise_state["phase"] == "down":
+                exercise_state["repCount"] += 1
+            exercise_state["phase"] = "up"
+    else:
+        # in-between: don't flip phase, but reset counters slowly
+        exercise_state["downFrames"] = 0
+        exercise_state["upFrames"] = 0
+
+    return {"kneeAngle": round(angle, 1), "leg": which}
 
 class Config:
     def __init__(self):
@@ -126,6 +221,38 @@ def draw_landmarks(frame, pts):
         if s < len(p_px) and e < len(p_px): cv2.line(img, p_px[s], p_px[e], (255, 0, 0), 2, cv2.LINE_AA)
     for x, y in p_px: cv2.circle(img, (x, y), 4, (0, 255, 0), -1, cv2.LINE_AA)
     return img
+
+
+def is_full_body_visible(pts, margin: float = 0.05, min_visibility: float = 0.5) -> bool:
+    """
+    Heurystyka: uznajemy 'cała sylwetka w kadrze', jeśli kluczowe punkty (głowa/tułów/stopy)
+    są wykryte, mają visibility oraz nie wypadają poza kadr (z marginesem).
+    """
+    if not pts:
+        return False
+
+    # MediaPipe Pose landmarks indices
+    required = [
+        0,   # nose (głowa)
+        11,  # left_shoulder
+        12,  # right_shoulder
+        23,  # left_hip
+        24,  # right_hip
+        27,  # left_ankle
+        28,  # right_ankle
+    ]
+
+    for idx in required:
+        if idx >= len(pts):
+            return False
+        lm = pts[idx]
+        v = getattr(lm, "visibility", 0.0) or 0.0
+        if v < min_visibility:
+            return False
+        if not (margin <= lm.x <= 1.0 - margin and margin <= lm.y <= 1.0 - margin):
+            return False
+
+    return True
 
 
 # ---------------------------------------------------------------------------
@@ -258,6 +385,10 @@ async def ws_handler(ws):
             if f_front is None and f_side is None:
                 continue
 
+            full_front = is_full_body_visible(pts_front) if f_front is not None else False
+            full_side = is_full_body_visible(pts_side) if f_side is not None else False
+            ex_metrics = update_bulgarian_squat(pts_side, pts_front)
+
             b64_front = None
             pts_data = None
             if f_front is not None:
@@ -271,7 +402,19 @@ async def ws_handler(ws):
                 b64_side = base64.b64encode(cv2.imencode('.jpg', img_side)[1]).decode('utf-8')
 
             try:
-                await ws.send(json.dumps({"image": b64_front, "imageSide": b64_side, "points": pts_data}))
+                await ws.send(json.dumps({
+                    "image": b64_front,
+                    "imageSide": b64_side,
+                    "points": pts_data,
+                    "fullBodyVisibleFront": full_front,
+                    "fullBodyVisibleSide": full_side,
+                    "exercise": {
+                        "name": exercise_state["name"],
+                        "repCount": exercise_state["repCount"],
+                        "phase": exercise_state["phase"],
+                        "metrics": ex_metrics,
+                    },
+                }))
             except:
                 break
 

@@ -6,8 +6,6 @@ Modularne API dla obsługi audio w aplikacji Virtualnego Trenera, zbudowane z my
 
 - **Text-to-Speech (TTS)** - zamiana tekstu na mowę
 - **Speech-to-Text (STT)** - rozpoznawanie mowy z mikrofonu
-- **Repeat Voice** - nasłuchiwanie i powtarzanie głosu
-- **Hello Command** - szybkie powiedzenie "Hello"
 - **Konfigurowalne ustawienia** - różne języki, timeouty
 - **Obsługa błędów** - szczegółowe komunikaty o błędach
 
@@ -27,9 +25,6 @@ class VirtualTrainerAudioAPI:
 
     def listen(self, timeout: int = 10, language: str = 'pl-PL') -> Dict[str, Any]:
         # Rozpoznawanie mowy
-
-    def repeat_voice(self, timeout: int = 10) -> Dict[str, Any]:
-        # Nasłuchiwanie i powtarzanie głosu
 ```
 
 ## API Endpoints
@@ -40,7 +35,7 @@ Sprawdza status API
 {
   "status": "ok",
   "message": "Virtual Trainer Audio API działa poprawnie",
-  "features": ["TTS", "STT", "Repeat", "Hello"],
+  "features": ["TTS", "STT"],
   "languages": ["pl-PL", "en-US"]
 }
 ```
@@ -74,36 +69,12 @@ Rozpoznaje mowę z mikrofonu
 }
 ```
 
-### GET /repeat
-Nasłuchuje głosu i go powtarza
-```json
-// Request: /repeat?timeout=10
-
-// Response
-{
-  "status": "success",
-  "original_text": "tekst do powtórzenia",
-  "message": "Powtórzono: tekst do powtórzenia"
-}
-```
-
-### GET /hello
-Mówi "Hello"
-```json
-// Response
-{
-  "status": "success",
-  "message": "Wypowiedziano: Hello"
-}
-```
-
 ## Status Codes
 
 - `success` - operacja zakończona sukcesem
 - `timeout` - brak wykrycia mowy w czasie oczekiwania
 - `no_speech` - nie udało się rozpoznać mowy
 - `error` - błąd aplikacji lub urządzenia
-- `partial_success` - częściowy sukces (np. rozpoznano ale nie powtórzono)
 
 ## Konfiguracja
 

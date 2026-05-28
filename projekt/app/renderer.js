@@ -71,8 +71,9 @@ ipcRenderer.on('mediapipe-data', (event, data) => {
 
   if (data.image) {
     document.getElementById('camera').src = 'data:image/jpeg;base64,' + data.image;
-    // Opcjonalnie: jeśli masz oddzielny feed z side kamery
-    // document.getElementById('camera-side').src = 'data:image/jpeg;base64,' + data.imageSide;
+    if (data.imageSide) {
+      document.getElementById('camera-side').src = 'data:image/jpeg;base64,' + data.imageSide;
+    }
   } else {
     // W tej uproszczonej wersji logi lądują w textarea
     const output = document.getElementById('output');
@@ -146,8 +147,6 @@ if(speakBtn && speechOutput) {
     });
 }
 
-const helloBtn = document.getElementById('hello-btn');
-
 //obsługa przycisku kalibracji dźwięku
 const calibrateBtn = document.getElementById('calibrate-btn');
 if(calibrateBtn && speechOutput) {
@@ -185,84 +184,6 @@ if(calibrateBtn && speechOutput) {
         isAudioOperationInProgress = false;
         calibrateBtn.disabled = false;
         calibrateBtn.innerText = "Kalibruj dźwięk";
-        speechOutput.scrollTop = speechOutput.scrollHeight;
-    }
-    });
-}
-
-//obsługa przycisku "Hello"
-if(helloBtn) {
-    helloBtn.addEventListener('click', async () => {
-    if (isAudioOperationInProgress) {
-        console.log("Operacja audio już w trakcie, czekaj...");
-        return;
-    }
-
-    isAudioOperationInProgress = true;
-    helloBtn.disabled = true;
-    helloBtn.innerText = "Mówię...";
-
-    try {
-        const response = await fetchWithTimeout(`${audioServiceUrl}/hello`, {}, 10000);
-        if (!response.ok) {
-        const body = await response.text();
-        throw new Error(`Błąd serwera audio: ${response.status} ${body}`);
-        }
-
-        const data = await response.json();
-        if (data.status === 'success') {
-        console.log("Powiedziano 'Hello'");
-        } else {
-        console.error("Błąd podczas mówienia:", data.message);
-        }
-    } catch (error) {
-        console.error("Błąd połączenia z serwerem Flask:", error);
-    } finally {
-        isAudioOperationInProgress = false;
-        helloBtn.disabled = false;
-        helloBtn.innerText = "Powiedz \"Hello\"";
-    }
-    });
-}
-
-const repeatBtn = document.getElementById('repeat-btn');
-
-//obsługa przycisku powtarzania głosu
-if(repeatBtn && speechOutput) {
-    repeatBtn.addEventListener('click', async () => {
-    if (isAudioOperationInProgress) {
-        console.log("Operacja audio już w trakcie, czekaj...");
-        return;
-    }
-
-    speechOutput.scrollTop = speechOutput.scrollHeight;
-    isAudioOperationInProgress = true;
-    repeatBtn.disabled = true;
-    repeatBtn.innerText = "Słucham i powtarzam (czeka na ciszę)...";
-
-    try {
-        // Pobierz aktualne ustawienia języka
-        const currentSettings = loadSettings();
-        const response = await fetchWithTimeout(`${audioServiceUrl}/repeat?timeout=30&dynamic=true&language=${currentSettings.language}`, {}, 45000);
-        if (!response.ok) {
-        const body = await response.text();
-        throw new Error(`Błąd serwera audio: ${response.status} ${body}`);
-        }
-
-        const data = await response.json();
-        console.log("Odpowiedź /repeat:", data);
-        if (data.status === 'success') {
-        speechOutput.value += `\nPowtórzono: "${data.original_text}"`;
-        } else {
-        speechOutput.value += `\n[Info]: ${data.message}`;
-        }
-    } catch (error) {
-        speechOutput.value += `\n[Błąd]: ${error.message}. Upewnij się, że audio_service.py działa.`;
-        console.error("Błąd /repeat:", error);
-    } finally {
-        isAudioOperationInProgress = false;
-        repeatBtn.disabled = false;
-        repeatBtn.innerText = "Powtórz głos";
         speechOutput.scrollTop = speechOutput.scrollHeight;
     }
     });
@@ -359,13 +280,16 @@ async function enumerateCameras() {
 
       videoDevices.forEach((device, index) => {
         const option = document.createElement('option');
-        option.value = device.deviceId;
+        // OpenCV po stronie Pythona wybiera kamerę po indeksie (0,1,2...).
+        // Dlatego w config wysyłamy indeks, a nie browserowe deviceId (string).
+        option.value = String(index);
         option.textContent = device.label || `Kamera ${index + 1}`;
+        option.dataset.deviceId = device.deviceId;
         select.appendChild(option);
       });
 
       // Przywróć poprzednią wartość jeśli istnieje
-      if (currentValue && videoDevices.find(d => d.deviceId === currentValue)) {
+      if (currentValue && videoDevices[Number(currentValue)]) {
         select.value = currentValue;
       }
     });

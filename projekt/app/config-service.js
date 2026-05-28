@@ -116,7 +116,9 @@
 function gatherConfiguration() {
   const arOverlayEnabled = document.getElementById('ar-overlay-enabled')?.checked ?? true;
   const cameraPreview = document.getElementById('camera');
-  const camerasEnabled = cameraPreview ? !cameraPreview.classList.contains('hidden') : true;
+  const cameraPreviewSide = document.getElementById('camera-side');
+  const camerasEnabled = (cameraPreview ? !cameraPreview.classList.contains('hidden') : true)
+    || (cameraPreviewSide ? !cameraPreviewSide.classList.contains('hidden') : true);
   
   const config = {
     audio: {
@@ -130,11 +132,13 @@ function gatherConfiguration() {
       enabled: camerasEnabled,
       ar_overlay: arOverlayEnabled,
       front: {
+        // `renderer.js` ustawia value na indeks kamery (0,1,2...) kompatybilny z OpenCV
         deviceId: document.getElementById('camera-select-front')?.value || '',
         resolution: '1920x1080',
         fps: 30
       },
       side: {
+        // `renderer.js` ustawia value na indeks kamery (0,1,2...) kompatybilny z OpenCV
         deviceId: document.getElementById('camera-select-side')?.value || '',
         resolution: '1280x720',
         fps: 30

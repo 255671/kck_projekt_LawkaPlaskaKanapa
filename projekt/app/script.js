@@ -21,6 +21,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- TOGGLE KAMERY ---
     const toggleCameraBtn = document.getElementById('toggle-camera-btn');
     const cameraElement = document.getElementById('camera');
+    const cameraSideElement = document.getElementById('camera-side');
 
     if (toggleCameraBtn && cameraElement) {
         const toggleTextSpan = toggleCameraBtn.querySelector('span');
@@ -28,6 +29,7 @@ document.addEventListener('DOMContentLoaded', () => {
         toggleCameraBtn.addEventListener('click', () => {
         if (cameraElement.classList.contains('hidden')) {
             cameraElement.classList.remove('hidden');
+            if (cameraSideElement) cameraSideElement.classList.remove('hidden');
             toggleTextSpan.textContent = 'Ukryj kamerę';
             // Zmiana stylu na aktywny
             toggleCameraBtn.style.backgroundColor = 'transparent';
@@ -35,6 +37,7 @@ document.addEventListener('DOMContentLoaded', () => {
             toggleCameraBtn.style.borderColor = 'var(--c4)';
         } else {
             cameraElement.classList.add('hidden');
+            if (cameraSideElement) cameraSideElement.classList.add('hidden');
             toggleTextSpan.textContent = 'Pokaż kamerę';
             // Powrót do pierwotnego stylu
             toggleCameraBtn.style.backgroundColor = 'var(--c3)';

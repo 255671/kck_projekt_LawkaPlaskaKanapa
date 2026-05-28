@@ -22,30 +22,38 @@ POSE_CONNECTIONS = [(0, 1), (1, 2), (2, 3), (3, 7), (0, 4), (4, 5), (5, 6), (6, 
 # ---------------------------------------------------------------------------
 # SHARED STATE & CONFIG
 # ---------------------------------------------------------------------------
-state = {"frame": None, "points": None, "ts_ms": 0}
-locks = {"frame": threading.Lock(), "points": threading.Lock()}
+state = {"frame_front": None, "frame_side": None, "points_front": None, "ts_ms": 0}
+locks = {"frame_front": threading.Lock(), "frame_side": threading.Lock(), "points_front": threading.Lock()}
 
 
 class Config:
     def __init__(self):
         self.lock = threading.Lock()
-        self.cam_idx, self.cam_en, self.cam_fps, self.ar = 0, False, 10, True
-        self.w, self.h, self.pts_fps = 1280, 720, 10
-        self.restart = False
+        self.cam_en, self.ar = False, True
+        self.front_idx, self.side_idx = 0, 0
+        self.front_w, self.front_h, self.front_fps = 1280, 720, 10
+        self.side_w, self.side_h, self.side_fps = 1280, 720, 10
+        self.pts_fps = 10
+        self.restart_front = False
+        self.restart_side = False
 
     def apply(self, p: dict):
         cameras = p.get("cameras", {})
-        f = cameras.get("front", {})
+        f = cameras.get("front", {}) or {}
+        s = cameras.get("side", {}) or {}
         with self.lock:
             self.cam_en = bool(cameras.get("enabled", self.cam_en))
             self.ar = bool(cameras.get("ar_overlay", self.ar))
             if "fps" in f:
-                self.cam_fps = self.pts_fps = int(f["fps"])
+                self.front_fps = int(f["fps"])
+                self.pts_fps = int(f["fps"])
+            if "fps" in s:
+                self.side_fps = int(s["fps"])
             try:
                 if "resolution" in f:
                     nw, nh = map(int, f["resolution"].split("x"))
-                    if (nw, nh) != (self.w, self.h):
-                        self.w, self.h, self.restart = nw, nh, True
+                    if (nw, nh) != (self.front_w, self.front_h):
+                        self.front_w, self.front_h, self.restart_front = nw, nh, True
 
                 if "deviceId" in f:
                     device_id = f["deviceId"]
@@ -56,8 +64,25 @@ class Config:
                     else:
                         new_idx = None
 
-                    if new_idx is not None and new_idx != self.cam_idx:
-                        self.cam_idx, self.restart = new_idx, True
+                    if new_idx is not None and new_idx != self.front_idx:
+                        self.front_idx, self.restart_front = new_idx, True
+
+                if "resolution" in s:
+                    nw, nh = map(int, s["resolution"].split("x"))
+                    if (nw, nh) != (self.side_w, self.side_h):
+                        self.side_w, self.side_h, self.restart_side = nw, nh, True
+
+                if "deviceId" in s:
+                    device_id = s["deviceId"]
+                    if isinstance(device_id, int):
+                        new_idx = device_id
+                    elif isinstance(device_id, str) and device_id.isdigit():
+                        new_idx = int(device_id)
+                    else:
+                        new_idx = None
+
+                    if new_idx is not None and new_idx != self.side_idx:
+                        self.side_idx, self.restart_side = new_idx, True
             except (ValueError, TypeError):
                 pass
 
@@ -95,25 +120,57 @@ def draw_landmarks(frame, pts):
 # BACKGROUND THREADS
 # ---------------------------------------------------------------------------
 def camera_thread_fn():
-    cap = None
+    cap_front = None
+    cap_side = None
     while True:
         cfg = config.snapshot()
-        if cap is None or cfg["restart"]:
-            if cap: cap.release(); time.sleep(0.3)
-            cap = cv2.VideoCapture(cfg["cam_idx"], cv2.CAP_MSMF)
-            if not cap.isOpened(): cap = None; time.sleep(2.0); continue
-            with config.lock:
-                config.restart = False
-            print(f"Kamera {cfg['cam_idx']} start -> Cel: {cfg['w']}x{cfg['h']}", flush=True)
+        if not cfg["cam_en"]:
+            time.sleep(0.05)
+            continue
 
-        ret, frame = cap.read()
-        if not ret: time.sleep(0.01); continue
+        if cap_front is None or cfg["restart_front"]:
+            if cap_front:
+                cap_front.release()
+                time.sleep(0.3)
+            cap_front = cv2.VideoCapture(cfg["front_idx"], cv2.CAP_MSMF)
+            if not cap_front.isOpened():
+                cap_front = None
+                time.sleep(1.0)
+            else:
+                with config.lock:
+                    config.restart_front = False
+                print(f"Kamera FRONT {cfg['front_idx']} start -> Cel: {cfg['front_w']}x{cfg['front_h']}", flush=True)
 
-        if frame.shape[:2] != (cfg["h"], cfg["w"]):
-            frame = cv2.resize(frame, (cfg["w"], cfg["h"]), interpolation=cv2.INTER_LINEAR)
+        if cap_side is None or cfg["restart_side"]:
+            if cap_side:
+                cap_side.release()
+                time.sleep(0.3)
+            cap_side = cv2.VideoCapture(cfg["side_idx"], cv2.CAP_MSMF)
+            if not cap_side.isOpened():
+                cap_side = None
+                time.sleep(1.0)
+            else:
+                with config.lock:
+                    config.restart_side = False
+                print(f"Kamera SIDE {cfg['side_idx']} start -> Cel: {cfg['side_w']}x{cfg['side_h']}", flush=True)
 
-        with locks["frame"]:
-            state["frame"] = frame
+        if cap_front:
+            ret, frame = cap_front.read()
+            if ret:
+                if frame.shape[:2] != (cfg["front_h"], cfg["front_w"]):
+                    frame = cv2.resize(frame, (cfg["front_w"], cfg["front_h"]), interpolation=cv2.INTER_LINEAR)
+                with locks["frame_front"]:
+                    state["frame_front"] = frame
+
+        if cap_side:
+            ret, frame = cap_side.read()
+            if ret:
+                if frame.shape[:2] != (cfg["side_h"], cfg["side_w"]):
+                    frame = cv2.resize(frame, (cfg["side_w"], cfg["side_h"]), interpolation=cv2.INTER_LINEAR)
+                with locks["frame_side"]:
+                    state["frame_side"] = frame
+
+        time.sleep(0.001)
 
 
 def inference_thread_fn():
@@ -126,8 +183,8 @@ def inference_thread_fn():
         cfg = config.snapshot()
         time.sleep(1.0 / max(1, cfg["pts_fps"]))
 
-        with locks["frame"]:
-            f = state["frame"]
+        with locks["frame_front"]:
+            f = state["frame_front"]
         if f is None: continue
 
         mp_img = mp.Image(image_format=mp.ImageFormat.SRGB, data=cv2.cvtColor(f.copy(), cv2.COLOR_BGR2RGB))
@@ -135,8 +192,8 @@ def inference_thread_fn():
 
         try:
             res = lm.detect_for_video(mp_img, state["ts_ms"])
-            with locks["points"]:
-                state["points"] = res.pose_landmarks[0] if res.pose_landmarks else None
+            with locks["points_front"]:
+                state["points_front"] = res.pose_landmarks[0] if res.pose_landmarks else None
         except Exception as e:
             print(f"Inference err: {e}")
 
@@ -150,25 +207,35 @@ async def ws_handler(ws):
     async def sender():
         while True:
             cfg = config.snapshot()
-            await asyncio.sleep(1.0 / max(1, cfg["cam_fps"]))
+            await asyncio.sleep(1.0 / max(1, cfg["front_fps"]))
             if not cfg["cam_en"]:
                 try:
-                    await ws.send(json.dumps({"image": None, "points": None})); continue
+                    await ws.send(json.dumps({"image": None, "imageSide": None, "points": None})); continue
                 except:
                     break
 
-            with locks["frame"]:
-                f = state["frame"]
-            with locks["points"]:
-                pts = state["points"]
-            if f is None: continue
+            with locks["frame_front"]:
+                f_front = state["frame_front"]
+            with locks["frame_side"]:
+                f_side = state["frame_side"]
+            with locks["points_front"]:
+                pts = state["points_front"]
+            if f_front is None and f_side is None:
+                continue
 
-            img = draw_landmarks(f, pts) if cfg["ar"] else f
-            b64_img = base64.b64encode(cv2.imencode('.jpg', img)[1]).decode('utf-8')
-            pts_data = [{"x": p.x, "y": p.y, "z": p.z, "v": getattr(p, 'visibility', 0)} for p in pts] if pts else None
+            b64_front = None
+            pts_data = None
+            if f_front is not None:
+                img = draw_landmarks(f_front, pts) if cfg["ar"] else f_front
+                b64_front = base64.b64encode(cv2.imencode('.jpg', img)[1]).decode('utf-8')
+                pts_data = [{"x": p.x, "y": p.y, "z": p.z, "v": getattr(p, 'visibility', 0)} for p in pts] if pts else None
+
+            b64_side = None
+            if f_side is not None:
+                b64_side = base64.b64encode(cv2.imencode('.jpg', f_side)[1]).decode('utf-8')
 
             try:
-                await ws.send(json.dumps({"image": b64_img, "points": pts_data}))
+                await ws.send(json.dumps({"image": b64_front, "imageSide": b64_side, "points": pts_data}))
             except:
                 break
 

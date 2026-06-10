@@ -66,27 +66,46 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 45000) {
   }
 }
 
-ipcRenderer.on('mediapipe-data', (event, data) => {
-  console.log('Received from Python:', data);
+function updateExerciseUI(exercise) {
+  if (!exercise) return;
 
-  if (data.image) {
-    document.getElementById('camera').src = 'data:image/jpeg;base64,' + data.image;
+  const repCount = typeof exercise.repCount === 'number' ? exercise.repCount : 0;
+  const phase = exercise.phase || '--';
+  const kneeAngle = exercise.metrics && typeof exercise.metrics.kneeAngle === 'number'
+    ? exercise.metrics.kneeAngle
+    : null;
+
+  const repCountEl = document.getElementById('rep-count');
+  const repPhaseEl = document.getElementById('rep-phase');
+  const repKneeAngleEl = document.getElementById('rep-knee-angle');
+  const statsRepCountEl = document.getElementById('stats-rep-count');
+  const statsRepPhaseEl = document.getElementById('stats-rep-phase');
+  const statsKneeAngleEl = document.getElementById('stats-knee-angle');
+  const statsRepTargetEl = document.getElementById('stats-rep-target');
+  const repetitionsInput = document.getElementById('repetitions-input');
+
+  if (repCountEl) repCountEl.textContent = String(repCount);
+  if (repPhaseEl) repPhaseEl.textContent = phase;
+  if (repKneeAngleEl) repKneeAngleEl.textContent = kneeAngle !== null ? String(kneeAngle) : '--';
+  if (statsRepCountEl) statsRepCountEl.textContent = String(repCount);
+  if (statsRepPhaseEl) statsRepPhaseEl.textContent = phase;
+  if (statsKneeAngleEl) statsKneeAngleEl.textContent = kneeAngle !== null ? String(kneeAngle) : '--';
+  if (statsRepTargetEl && repetitionsInput) {
+    statsRepTargetEl.textContent = repetitionsInput.value || '10';
+  }
+}
+
+ipcRenderer.on('mediapipe-data', (event, data) => {
+  if (data.exercise) {
+    updateExerciseUI(data.exercise);
+  }
+
+  if (data.image || data.imageSide) {
+    if (data.image) {
+      document.getElementById('camera').src = 'data:image/jpeg;base64,' + data.image;
+    }
     if (data.imageSide) {
       document.getElementById('camera-side').src = 'data:image/jpeg;base64,' + data.imageSide;
-    }
-
-    // UI: licznik powtórzeń
-    try {
-      const repCountEl = document.getElementById('rep-count');
-      const repPhaseEl = document.getElementById('rep-phase');
-      if (repCountEl && data.exercise && typeof data.exercise.repCount === 'number') {
-        repCountEl.textContent = String(data.exercise.repCount);
-      }
-      if (repPhaseEl && data.exercise && typeof data.exercise.phase === 'string') {
-        repPhaseEl.textContent = data.exercise.phase || '--';
-      }
-    } catch {
-      // ignore
     }
 
     // Debug: wypisz wykrywanie ćwiczenia do logów (z throttlingiem)
@@ -98,7 +117,9 @@ ipcRenderer.on('mediapipe-data', (event, data) => {
         if ((now - window.__lastExerciseLogAt) > 1000) {
           window.__lastExerciseLogAt = now;
           const m = data.exercise.metrics;
-          const metricText = m ? ` angle=${m.kneeAngle} leg=${m.leg}` : '';
+          const metricText = m
+            ? ` angle=${m.kneeAngle} leg=${m.leg} src=${m.source || '?'} armed=${m.armed ? 'yes' : 'no'}`
+            : ' brak metryk';
           output.innerText += `\n[Exercise] ${data.exercise.name} reps=${data.exercise.repCount} phase=${data.exercise.phase}${metricText}`;
           output.scrollTop = output.scrollHeight;
         }

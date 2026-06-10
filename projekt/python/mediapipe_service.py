@@ -38,21 +38,44 @@ locks = {
 }
 
 # ---------------------------------------------------------------------------
-# EXERCISE DETECTION (Bulgarian split squat) - heuristic
+# EXERCISE DETECTION (Bulgarian split squat) — state machine + hysteresis
 # ---------------------------------------------------------------------------
+# States: IDLE -> DESCENDING -> BOTTOM -> ASCENDING -> (rep++) IDLE
+# Tracking starts only after a valid starting pose is held (back foot elevated).
+
+ANGLE_TOP_STANDING = 158.0       # knee extended at start / finish
+ANGLE_DESCEND_ENTER = 142.0      # must drop below to start descent (deadzone above)
+ANGLE_BOTTOM_ENTER = 105.0       # sufficient depth
+ANGLE_BOTTOM_EXIT = 118.0        # hysteresis: leave bottom only above this
+ANGLE_REP_COMPLETE = 154.0       # must extend above this to count rep (below standing)
+
+ELEVATION_MIN = 0.06             # back ankle must be higher than front (normalized y)
+BACK_KNEE_MIN = 130.0            # back leg relatively extended on bench
+
+START_HOLD_FRAMES = 10           # valid start must be held before arming
+CONFIRM_FRAMES = 5               # frames required for each transition
+ABORT_FRAMES = 8                 # invalid pose frames before aborting active rep
+
 exercise_state = {
     "enabled": True,
     "name": "bulgarian_squat",
     "repCount": 0,
-    "phase": "unknown",  # up | down | unknown
+    "phase": "IDLE",
+    "armed": False,
     "lastKneeAngle": None,
-    "downFrames": 0,
-    "upFrames": 0,
+    "lastLeg": None,
+    "lastSource": None,
+    "lastElevation": None,
+    "sm_state": "IDLE",
+    "start_hold_frames": 0,
+    "confirm_frames": 0,
+    "abort_frames": 0,
+    "reached_bottom": False,
+    "lastMetrics": None,
 }
 
 
 def _angle_deg(a, b, c) -> float:
-    # angle ABC in degrees where points are (x,y)
     import math
     bax = a[0] - b[0]
     bay = a[1] - b[1]
@@ -67,71 +90,231 @@ def _angle_deg(a, b, c) -> float:
     return math.degrees(math.acos(cosv))
 
 
-def knee_angle_from_pts(pts):
-    """
-    Zwraca (angle_deg, side) dla bardziej 'zgiętej' nogi (mniejszy kąt kolana).
-    Landmarks: hip(23/24), knee(25/26), ankle(27/28).
-    """
-    if not pts or len(pts) < 29:
-        return None, None
+def _lm_xy(lm):
+    if hasattr(lm, "x") and hasattr(lm, "y"):
+        return lm.x, lm.y
+    if isinstance(lm, dict):
+        return lm.get("x"), lm.get("y")
+    return None, None
 
-    def pick(hip_i, knee_i, ankle_i):
-        hip = pts[hip_i]
-        knee = pts[knee_i]
-        ankle = pts[ankle_i]
-        v_ok = (getattr(hip, "visibility", 0) or 0) > 0.5 and (getattr(knee, "visibility", 0) or 0) > 0.5 and (getattr(ankle, "visibility", 0) or 0) > 0.5
-        if not v_ok:
-            return None
-        return _angle_deg((hip.x, hip.y), (knee.x, knee.y), (ankle.x, ankle.y))
 
-    left = pick(23, 25, 27)
-    right = pick(24, 26, 28)
-    candidates = [(left, "left"), (right, "right")]
-    candidates = [(a, s) for (a, s) in candidates if a is not None and a == a]  # a==a filters NaN
-    if not candidates:
-        return None, None
-    # smaller angle => deeper bend
-    return sorted(candidates, key=lambda x: x[0])[0]
+def _lm_visible(lm, min_visibility: float = 0.25) -> bool:
+    visibility = getattr(lm, "visibility", None)
+    if visibility is None and isinstance(lm, dict):
+        visibility = lm.get("v", lm.get("visibility"))
+    if visibility is None:
+        return True
+    return visibility >= min_visibility
+
+
+def _leg_metrics(pts, hip_i, knee_i, ankle_i, side_name):
+    if not pts or len(pts) <= ankle_i:
+        return None
+    hip, knee, ankle = pts[hip_i], pts[knee_i], pts[ankle_i]
+    if not (_lm_visible(hip) and _lm_visible(knee) and _lm_visible(ankle)):
+        return None
+    hx, hy = _lm_xy(hip)
+    kx, ky = _lm_xy(knee)
+    ax, ay = _lm_xy(ankle)
+    if None in (hx, hy, kx, ky, ax, ay):
+        return None
+    knee_angle = _angle_deg((hx, hy), (kx, ky), (ax, ay))
+    if knee_angle != knee_angle:
+        return None
+    return {
+        "side": side_name,
+        "knee_angle": knee_angle,
+        "ankle_y": ay,
+        "ankle_x": ax,
+        "hip_y": hy,
+        "knee_y": ky,
+    }
+
+
+def _analyze_bulgarian_pose(pts):
+    """
+  Side-view pose: identify front (working) and back (elevated) leg.
+  Returns dict with front_knee_angle, elevation, etc. or None.
+    """
+    left = _leg_metrics(pts, 23, 25, 27, "left")
+    right = _leg_metrics(pts, 24, 26, 28, "right")
+    legs = [l for l in (left, right) if l is not None]
+    if len(legs) < 2:
+        return None
+
+    # Front leg: ankle lower in frame (larger y). Back leg: elevated (smaller y).
+    front = max(legs, key=lambda l: l["ankle_y"])
+    back = min(legs, key=lambda l: l["ankle_y"])
+    elevation = front["ankle_y"] - back["ankle_y"]
+
+    return {
+        "front": front,
+        "back": back,
+        "elevation": elevation,
+        "front_knee_angle": front["knee_angle"],
+        "back_knee_angle": back["knee_angle"],
+        "front_leg": front["side"],
+    }
+
+
+def _is_valid_start_pose(pose):
+    """Strict starting position before tracking is armed."""
+    return (
+        pose["elevation"] >= ELEVATION_MIN
+        and pose["front_knee_angle"] >= ANGLE_TOP_STANDING
+        and pose["back_knee_angle"] >= BACK_KNEE_MIN
+    )
+
+
+def _is_pose_trackable(pose):
+    """Looser check during an active rep — back foot still elevated."""
+    return pose["elevation"] >= (ELEVATION_MIN * 0.6)
+
+
+def _reset_rep_tracking():
+    exercise_state["sm_state"] = "IDLE"
+    exercise_state["armed"] = False
+    exercise_state["start_hold_frames"] = 0
+    exercise_state["confirm_frames"] = 0
+    exercise_state["abort_frames"] = 0
+    exercise_state["reached_bottom"] = False
+    exercise_state["phase"] = "IDLE"
+
+
+def _bump_confirm(current: int, target: int) -> int:
+    return current + 1 if current < target else target
 
 
 def update_bulgarian_squat(pts_prefer_side, pts_fallback_front):
     """
-    Prosty licznik powtórzeń na bazie kąta kolana.
-    - down gdy kąt < 115 przez kilka klatek
-    - up gdy kąt > 160 przez kilka klatek po 'down'
+    Bulgarian split squat rep counter with state machine and hysteresis.
+    Prefer side camera — front view is too unreliable for split squat geometry.
     """
     pts = pts_prefer_side if pts_prefer_side else pts_fallback_front
-    angle, which = knee_angle_from_pts(pts)
-    if angle is None:
-        exercise_state["phase"] = "unknown"
+    source = "side" if pts_prefer_side else "front"
+
+    pose = _analyze_bulgarian_pose(pts)
+    if pose is None:
+        if exercise_state["sm_state"] != "IDLE":
+            exercise_state["abort_frames"] += 1
+            if exercise_state["abort_frames"] >= ABORT_FRAMES:
+                _reset_rep_tracking()
+        else:
+            exercise_state["phase"] = "IDLE"
         exercise_state["lastKneeAngle"] = None
-        exercise_state["downFrames"] = 0
-        exercise_state["upFrames"] = 0
+        exercise_state["lastLeg"] = None
+        exercise_state["lastSource"] = source
+        exercise_state["lastElevation"] = None
         return None
 
+    angle = pose["front_knee_angle"]
+    sm = exercise_state["sm_state"]
+
     exercise_state["lastKneeAngle"] = angle
-    down_th = 115.0
-    up_th = 160.0
-    need_frames = 3
+    exercise_state["lastLeg"] = pose["front_leg"]
+    exercise_state["lastSource"] = source
+    exercise_state["lastElevation"] = round(pose["elevation"], 3)
+    exercise_state["abort_frames"] = 0
 
-    if angle < down_th:
-        exercise_state["downFrames"] += 1
-        exercise_state["upFrames"] = 0
-        if exercise_state["downFrames"] >= need_frames:
-            exercise_state["phase"] = "down"
-    elif angle > up_th:
-        exercise_state["upFrames"] += 1
-        exercise_state["downFrames"] = 0
-        if exercise_state["upFrames"] >= need_frames:
-            if exercise_state["phase"] == "down":
+    valid_start = _is_valid_start_pose(pose)
+    trackable = _is_pose_trackable(pose)
+
+    # --- IDLE: validate starting position before arming ---
+    if sm == "IDLE":
+        if valid_start:
+            exercise_state["start_hold_frames"] = _bump_confirm(
+                exercise_state["start_hold_frames"], START_HOLD_FRAMES
+            )
+        else:
+            exercise_state["start_hold_frames"] = 0
+            exercise_state["armed"] = False
+
+        if exercise_state["start_hold_frames"] >= START_HOLD_FRAMES:
+            exercise_state["armed"] = True
+
+        if exercise_state["armed"] and angle < ANGLE_DESCEND_ENTER:
+            exercise_state["confirm_frames"] = _bump_confirm(
+                exercise_state["confirm_frames"], CONFIRM_FRAMES
+            )
+            if exercise_state["confirm_frames"] >= CONFIRM_FRAMES:
+                exercise_state["sm_state"] = "DESCENDING"
+                exercise_state["confirm_frames"] = 0
+                exercise_state["reached_bottom"] = False
+        else:
+            if sm == "IDLE":
+                exercise_state["confirm_frames"] = 0
+
+    # --- DESCENDING: moving down, wait for sufficient depth ---
+    elif sm == "DESCENDING":
+        if not trackable:
+            exercise_state["abort_frames"] += 1
+            if exercise_state["abort_frames"] >= ABORT_FRAMES:
+                _reset_rep_tracking()
+                return _metrics(pose, source)
+        elif angle < ANGLE_BOTTOM_ENTER:
+            exercise_state["confirm_frames"] = _bump_confirm(
+                exercise_state["confirm_frames"], CONFIRM_FRAMES
+            )
+            if exercise_state["confirm_frames"] >= CONFIRM_FRAMES:
+                exercise_state["sm_state"] = "BOTTOM"
+                exercise_state["confirm_frames"] = 0
+                exercise_state["reached_bottom"] = True
+        elif angle > ANGLE_TOP_STANDING:
+            # False start — returned to standing without depth
+            _reset_rep_tracking()
+
+    # --- BOTTOM: at depth, wait for ascent (hysteresis exit) ---
+    elif sm == "BOTTOM":
+        if not trackable:
+            exercise_state["abort_frames"] += 1
+            if exercise_state["abort_frames"] >= ABORT_FRAMES:
+                _reset_rep_tracking()
+                return _metrics(pose, source)
+        elif angle > ANGLE_BOTTOM_EXIT:
+            exercise_state["confirm_frames"] = _bump_confirm(
+                exercise_state["confirm_frames"], CONFIRM_FRAMES
+            )
+            if exercise_state["confirm_frames"] >= CONFIRM_FRAMES:
+                exercise_state["sm_state"] = "ASCENDING"
+                exercise_state["confirm_frames"] = 0
+
+    # --- ASCENDING: coming back up, count rep only after full extension ---
+    elif sm == "ASCENDING":
+        if not trackable:
+            exercise_state["abort_frames"] += 1
+            if exercise_state["abort_frames"] >= ABORT_FRAMES:
+                _reset_rep_tracking()
+                return _metrics(pose, source)
+        elif angle < ANGLE_BOTTOM_ENTER:
+            # Dropped back down without finishing — return to bottom
+            exercise_state["sm_state"] = "BOTTOM"
+            exercise_state["confirm_frames"] = 0
+        elif angle > ANGLE_REP_COMPLETE and exercise_state["reached_bottom"]:
+            exercise_state["confirm_frames"] = _bump_confirm(
+                exercise_state["confirm_frames"], CONFIRM_FRAMES
+            )
+            if exercise_state["confirm_frames"] >= CONFIRM_FRAMES:
                 exercise_state["repCount"] += 1
-            exercise_state["phase"] = "up"
-    else:
-        # in-between: don't flip phase, but reset counters slowly
-        exercise_state["downFrames"] = 0
-        exercise_state["upFrames"] = 0
+                _reset_rep_tracking()
+                exercise_state["start_hold_frames"] = 0
+        else:
+            exercise_state["confirm_frames"] = 0
 
-    return {"kneeAngle": round(angle, 1), "leg": which}
+    exercise_state["phase"] = exercise_state["sm_state"]
+    exercise_state["lastMetrics"] = _metrics(pose, source)
+    return exercise_state["lastMetrics"]
+
+
+def _metrics(pose, source):
+    return {
+        "kneeAngle": round(pose["front_knee_angle"], 1),
+        "backKneeAngle": round(pose["back_knee_angle"], 1),
+        "leg": pose["front_leg"],
+        "source": source,
+        "elevation": round(pose["elevation"], 3),
+        "armed": exercise_state["armed"],
+        "reachedBottom": exercise_state["reached_bottom"],
+    }
 
 class Config:
     def __init__(self):
@@ -357,6 +540,12 @@ def inference_thread_fn():
             except Exception as e:
                 print(f"Inference err (side): {e}")
 
+        with locks["points_front"]:
+            pts_front = state["points_front"]
+        with locks["points_side"]:
+            pts_side = state["points_side"]
+        update_bulgarian_squat(pts_side, pts_front)
+
 
 # ---------------------------------------------------------------------------
 # WEBSOCKET SERVER
@@ -370,7 +559,18 @@ async def ws_handler(ws):
             await asyncio.sleep(1.0 / max(1, cfg["front_fps"]))
             if not cfg["cam_en"]:
                 try:
-                    await ws.send(json.dumps({"image": None, "imageSide": None, "points": None})); continue
+                    await ws.send(json.dumps({
+                        "image": None,
+                        "imageSide": None,
+                        "points": None,
+                        "exercise": {
+                            "name": exercise_state["name"],
+                            "repCount": exercise_state["repCount"],
+                            "phase": exercise_state["phase"],
+                            "metrics": None,
+                        },
+                    }))
+                    continue
                 except:
                     break
 
@@ -387,7 +587,7 @@ async def ws_handler(ws):
 
             full_front = is_full_body_visible(pts_front) if f_front is not None else False
             full_side = is_full_body_visible(pts_side) if f_side is not None else False
-            ex_metrics = update_bulgarian_squat(pts_side, pts_front)
+            ex_metrics = exercise_state.get("lastMetrics")
 
             b64_front = None
             pts_data = None

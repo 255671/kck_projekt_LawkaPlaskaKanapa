@@ -40,37 +40,33 @@ locks = {
 # ---------------------------------------------------------------------------
 # EXERCISE DETECTION (Bulgarian split squat) — state machine + hysteresis
 # ---------------------------------------------------------------------------
-# States: IDLE -> DESCENDING -> BOTTOM -> ASCENDING -> (rep++) IDLE
-# Tracking starts only after a valid starting pose is held (back foot elevated).
+# States: NOT_READY -> READY -> DESCENDING -> BOTTOM -> ASCENDING -> TOP -> (rep++) READY
+# Tracking requires back foot elevated.
 
-ANGLE_TOP_STANDING = 158.0       # knee extended at start / finish
-ANGLE_DESCEND_ENTER = 142.0      # must drop below to start descent (deadzone above)
-ANGLE_BOTTOM_ENTER = 105.0       # sufficient depth
-ANGLE_BOTTOM_EXIT = 118.0        # hysteresis: leave bottom only above this
-ANGLE_REP_COMPLETE = 154.0       # must extend above this to count rep (below standing)
+ANGLE_READY = 145.0       # Minimal angle to be considered in READY (standing) position
+ANGLE_DESCENDING = 140.0  # Dropping below this means DESCENDING
+ANGLE_BOTTOM = 100.0      # Maximal angle to be considered in BOTTOM position
+ANGLE_ASCENDING = 115.0   # Rising above this means ASCENDING
+ANGLE_TOP = 145.0         # Angle to consider the person has returned to TOP
 
-ELEVATION_MIN = 0.06             # back ankle must be higher than front (normalized y)
-BACK_KNEE_MIN = 130.0            # back leg relatively extended on bench
+ELEVATION_MIN = 0.05      # back ankle must be higher than front (normalized y)
+BACK_KNEE_MIN = 70.0      # back leg on bench is usually bent ~90 deg
 
-START_HOLD_FRAMES = 10           # valid start must be held before arming
-CONFIRM_FRAMES = 5               # frames required for each transition
-ABORT_FRAMES = 8                 # invalid pose frames before aborting active rep
+CONFIRM_FRAMES = 2        # frames required for each transition
+ABORT_FRAMES = 10         # frames to wait before aborting rep if tracking is lost
 
 exercise_state = {
     "enabled": True,
     "name": "bulgarian_squat",
     "repCount": 0,
-    "phase": "IDLE",
-    "armed": False,
+    "phase": "NOT_READY",
     "lastKneeAngle": None,
     "lastLeg": None,
     "lastSource": None,
     "lastElevation": None,
-    "sm_state": "IDLE",
-    "start_hold_frames": 0,
+    "sm_state": "NOT_READY",
     "confirm_frames": 0,
     "abort_frames": 0,
-    "reached_bottom": False,
     "lastMetrics": None,
 }
 
@@ -132,17 +128,12 @@ def _leg_metrics(pts, hip_i, knee_i, ankle_i, side_name):
 
 
 def _analyze_bulgarian_pose(pts):
-    """
-  Side-view pose: identify front (working) and back (elevated) leg.
-  Returns dict with front_knee_angle, elevation, etc. or None.
-    """
     left = _leg_metrics(pts, 23, 25, 27, "left")
     right = _leg_metrics(pts, 24, 26, 28, "right")
     legs = [l for l in (left, right) if l is not None]
     if len(legs) < 2:
         return None
 
-    # Front leg: ankle lower in frame (larger y). Back leg: elevated (smaller y).
     front = max(legs, key=lambda l: l["ankle_y"])
     back = min(legs, key=lambda l: l["ankle_y"])
     elevation = front["ankle_y"] - back["ankle_y"]
@@ -157,28 +148,11 @@ def _analyze_bulgarian_pose(pts):
     }
 
 
-def _is_valid_start_pose(pose):
-    """Strict starting position before tracking is armed."""
-    return (
-        pose["elevation"] >= ELEVATION_MIN
-        and pose["front_knee_angle"] >= ANGLE_TOP_STANDING
-        and pose["back_knee_angle"] >= BACK_KNEE_MIN
-    )
-
-
-def _is_pose_trackable(pose):
-    """Looser check during an active rep — back foot still elevated."""
-    return pose["elevation"] >= (ELEVATION_MIN * 0.6)
-
-
 def _reset_rep_tracking():
-    exercise_state["sm_state"] = "IDLE"
-    exercise_state["armed"] = False
-    exercise_state["start_hold_frames"] = 0
+    exercise_state["sm_state"] = "NOT_READY"
     exercise_state["confirm_frames"] = 0
     exercise_state["abort_frames"] = 0
-    exercise_state["reached_bottom"] = False
-    exercise_state["phase"] = "IDLE"
+    exercise_state["phase"] = "NOT_READY"
 
 
 def _bump_confirm(current: int, target: int) -> int:
@@ -186,27 +160,29 @@ def _bump_confirm(current: int, target: int) -> int:
 
 
 def update_bulgarian_squat(pts_prefer_side, pts_fallback_front):
-    """
-    Bulgarian split squat rep counter with state machine and hysteresis.
-    Prefer side camera — front view is too unreliable for split squat geometry.
-    """
     pts = pts_prefer_side if pts_prefer_side else pts_fallback_front
     source = "side" if pts_prefer_side else "front"
 
     pose = _analyze_bulgarian_pose(pts)
-    if pose is None:
-        if exercise_state["sm_state"] != "IDLE":
+    # W trakcie ruchu usuwamy wymóg BACK_KNEE_MIN, zeby naturalne mocne zgięcie nogi na ławce nie psuło trackingu
+    if pose is None or pose["elevation"] < ELEVATION_MIN:
+        if exercise_state["sm_state"] != "NOT_READY":
             exercise_state["abort_frames"] += 1
             if exercise_state["abort_frames"] >= ABORT_FRAMES:
                 _reset_rep_tracking()
+                exercise_state["lastKneeAngle"] = None
+                exercise_state["lastLeg"] = None
+                exercise_state["lastSource"] = source
+                exercise_state["lastElevation"] = None
         else:
-            exercise_state["phase"] = "IDLE"
-        exercise_state["lastKneeAngle"] = None
-        exercise_state["lastLeg"] = None
-        exercise_state["lastSource"] = source
-        exercise_state["lastElevation"] = None
-        return None
+            _reset_rep_tracking()
+            exercise_state["lastKneeAngle"] = None
+            exercise_state["lastLeg"] = None
+            exercise_state["lastSource"] = source
+            exercise_state["lastElevation"] = None
+        return exercise_state.get("lastMetrics")
 
+    exercise_state["abort_frames"] = 0
     angle = pose["front_knee_angle"]
     sm = exercise_state["sm_state"]
 
@@ -214,91 +190,69 @@ def update_bulgarian_squat(pts_prefer_side, pts_fallback_front):
     exercise_state["lastLeg"] = pose["front_leg"]
     exercise_state["lastSource"] = source
     exercise_state["lastElevation"] = round(pose["elevation"], 3)
-    exercise_state["abort_frames"] = 0
 
-    valid_start = _is_valid_start_pose(pose)
-    trackable = _is_pose_trackable(pose)
-
-    # --- IDLE: validate starting position before arming ---
-    if sm == "IDLE":
-        if valid_start:
-            exercise_state["start_hold_frames"] = _bump_confirm(
-                exercise_state["start_hold_frames"], START_HOLD_FRAMES
-            )
+    if sm == "NOT_READY":
+        # Sprawdzamy BACK_KNEE_MIN tylko przy wchodzeniu w pozycję READY z NOT_READY
+        if angle >= ANGLE_READY and pose["back_knee_angle"] >= BACK_KNEE_MIN:
+            exercise_state["confirm_frames"] = _bump_confirm(exercise_state["confirm_frames"], CONFIRM_FRAMES)
+            if exercise_state["confirm_frames"] >= CONFIRM_FRAMES:
+                exercise_state["sm_state"] = "READY"
+                exercise_state["confirm_frames"] = 0
         else:
-            exercise_state["start_hold_frames"] = 0
-            exercise_state["armed"] = False
+            exercise_state["confirm_frames"] = 0
 
-        if exercise_state["start_hold_frames"] >= START_HOLD_FRAMES:
-            exercise_state["armed"] = True
-
-        if exercise_state["armed"] and angle < ANGLE_DESCEND_ENTER:
-            exercise_state["confirm_frames"] = _bump_confirm(
-                exercise_state["confirm_frames"], CONFIRM_FRAMES
-            )
+    elif sm == "READY":
+        if angle <= ANGLE_DESCENDING:
+            exercise_state["confirm_frames"] = _bump_confirm(exercise_state["confirm_frames"], CONFIRM_FRAMES)
             if exercise_state["confirm_frames"] >= CONFIRM_FRAMES:
                 exercise_state["sm_state"] = "DESCENDING"
                 exercise_state["confirm_frames"] = 0
-                exercise_state["reached_bottom"] = False
         else:
-            if sm == "IDLE":
-                exercise_state["confirm_frames"] = 0
-
-    # --- DESCENDING: moving down, wait for sufficient depth ---
+            exercise_state["confirm_frames"] = 0
+            
     elif sm == "DESCENDING":
-        if not trackable:
-            exercise_state["abort_frames"] += 1
-            if exercise_state["abort_frames"] >= ABORT_FRAMES:
-                _reset_rep_tracking()
-                return _metrics(pose, source)
-        elif angle < ANGLE_BOTTOM_ENTER:
-            exercise_state["confirm_frames"] = _bump_confirm(
-                exercise_state["confirm_frames"], CONFIRM_FRAMES
-            )
+        if angle <= ANGLE_BOTTOM:
+            exercise_state["confirm_frames"] = _bump_confirm(exercise_state["confirm_frames"], CONFIRM_FRAMES)
             if exercise_state["confirm_frames"] >= CONFIRM_FRAMES:
                 exercise_state["sm_state"] = "BOTTOM"
                 exercise_state["confirm_frames"] = 0
-                exercise_state["reached_bottom"] = True
-        elif angle > ANGLE_TOP_STANDING:
-            # False start — returned to standing without depth
-            _reset_rep_tracking()
+        elif angle >= ANGLE_READY:
+            # Went back up without hitting bottom
+            exercise_state["confirm_frames"] = _bump_confirm(exercise_state["confirm_frames"], CONFIRM_FRAMES)
+            if exercise_state["confirm_frames"] >= CONFIRM_FRAMES:
+                exercise_state["sm_state"] = "READY"
+                exercise_state["confirm_frames"] = 0
+        else:
+            exercise_state["confirm_frames"] = 0
 
-    # --- BOTTOM: at depth, wait for ascent (hysteresis exit) ---
     elif sm == "BOTTOM":
-        if not trackable:
-            exercise_state["abort_frames"] += 1
-            if exercise_state["abort_frames"] >= ABORT_FRAMES:
-                _reset_rep_tracking()
-                return _metrics(pose, source)
-        elif angle > ANGLE_BOTTOM_EXIT:
-            exercise_state["confirm_frames"] = _bump_confirm(
-                exercise_state["confirm_frames"], CONFIRM_FRAMES
-            )
+        if angle >= ANGLE_ASCENDING:
+            exercise_state["confirm_frames"] = _bump_confirm(exercise_state["confirm_frames"], CONFIRM_FRAMES)
             if exercise_state["confirm_frames"] >= CONFIRM_FRAMES:
                 exercise_state["sm_state"] = "ASCENDING"
                 exercise_state["confirm_frames"] = 0
-
-    # --- ASCENDING: coming back up, count rep only after full extension ---
-    elif sm == "ASCENDING":
-        if not trackable:
-            exercise_state["abort_frames"] += 1
-            if exercise_state["abort_frames"] >= ABORT_FRAMES:
-                _reset_rep_tracking()
-                return _metrics(pose, source)
-        elif angle < ANGLE_BOTTOM_ENTER:
-            # Dropped back down without finishing — return to bottom
-            exercise_state["sm_state"] = "BOTTOM"
-            exercise_state["confirm_frames"] = 0
-        elif angle > ANGLE_REP_COMPLETE and exercise_state["reached_bottom"]:
-            exercise_state["confirm_frames"] = _bump_confirm(
-                exercise_state["confirm_frames"], CONFIRM_FRAMES
-            )
-            if exercise_state["confirm_frames"] >= CONFIRM_FRAMES:
-                exercise_state["repCount"] += 1
-                _reset_rep_tracking()
-                exercise_state["start_hold_frames"] = 0
         else:
             exercise_state["confirm_frames"] = 0
+            
+    elif sm == "ASCENDING":
+        if angle >= ANGLE_TOP:
+            exercise_state["confirm_frames"] = _bump_confirm(exercise_state["confirm_frames"], CONFIRM_FRAMES)
+            if exercise_state["confirm_frames"] >= CONFIRM_FRAMES:
+                exercise_state["sm_state"] = "TOP"
+                exercise_state["repCount"] += 1
+                exercise_state["confirm_frames"] = 0
+        elif angle <= ANGLE_BOTTOM:
+            # Went back down without finishing
+            exercise_state["confirm_frames"] = _bump_confirm(exercise_state["confirm_frames"], CONFIRM_FRAMES)
+            if exercise_state["confirm_frames"] >= CONFIRM_FRAMES:
+                exercise_state["sm_state"] = "BOTTOM"
+                exercise_state["confirm_frames"] = 0
+        else:
+            exercise_state["confirm_frames"] = 0
+
+    elif sm == "TOP":
+        exercise_state["sm_state"] = "READY"
+        exercise_state["confirm_frames"] = 0
 
     exercise_state["phase"] = exercise_state["sm_state"]
     exercise_state["lastMetrics"] = _metrics(pose, source)
@@ -311,9 +265,7 @@ def _metrics(pose, source):
         "backKneeAngle": round(pose["back_knee_angle"], 1),
         "leg": pose["front_leg"],
         "source": source,
-        "elevation": round(pose["elevation"], 3),
-        "armed": exercise_state["armed"],
-        "reachedBottom": exercise_state["reached_bottom"],
+        "elevation": round(pose["elevation"], 3)
     }
 
 class Config:

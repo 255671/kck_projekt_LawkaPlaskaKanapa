@@ -290,71 +290,39 @@ if(listenBtn && speechOutput) {
 const cameraSelectFront = document.getElementById('camera-select-front');
 const cameraSelectSide = document.getElementById('camera-select-side');
 
+ipcRenderer.on('available-cameras', (event, cameras) => {
+  console.log(`[Cameras] Znaleziono ${cameras.length} kamer z Pythona:`, cameras);
+  
+  [cameraSelectFront, cameraSelectSide].forEach(select => {
+    if (!select) return;
+    const currentValue = select.value;
+    select.innerHTML = '<option value="">-- Domyślna --</option>';
+
+    if (!cameras || cameras.length === 0) {
+      const option = document.createElement('option');
+      option.value = '';
+      option.textContent = 'Brak dostępnych kamer';
+      option.disabled = true;
+      select.appendChild(option);
+      return;
+    }
+
+    cameras.forEach(cam => {
+      const option = document.createElement('option');
+      option.value = String(cam.index);
+      option.textContent = cam.name || `Kamera ${cam.index}`;
+      select.appendChild(option);
+    });
+
+    // Przywróć poprzednią wartość jeśli istnieje
+    if (currentValue) {
+      select.value = currentValue;
+    }
+  });
+});
+
 async function enumerateCameras() {
-  try {
-    // 1. Poproś o permissje (wybudzi uśpione kamery na niektórych systemach)
-    // No więc ten kod generalnie zwieszał cv2 próbujące dostać się do kamery urządzenia (chyba?)
-//    try {
-//      await navigator.mediaDevices.getUserMedia({
-//        video: { width: 1, height: 1 },
-//        audio: false
-//      }).then(stream => {
-//        // Zamknij stream - był tylko do uaktywnienia kamer
-//        stream.getTracks().forEach(track => track.stop());
-//      });
-//    } catch (e) {
-//      // Ignoruj błędy permissji, spróbuj mimo to
-//    }
-
-    // 2. Wylicz urządzenia
-    const devices = await navigator.mediaDevices.enumerateDevices();
-    const videoDevices = devices.filter(device => device.kind === 'videoinput');
-
-    console.log(`[Cameras] Znaleziono ${videoDevices.length} kamer:`);
-    videoDevices.forEach((d, i) => {
-      console.log(`  ${i + 1}. ${d.label || `Kamera ${i + 1}`} (${d.deviceId})`);
-    });
-
-    // 3. Aktualizuj oba selekty
-    [cameraSelectFront, cameraSelectSide].forEach(select => {
-      if (!select) return;
-      
-      const currentValue = select.value;
-      select.innerHTML = '<option value="">-- Domyślna --</option>';
-
-      if (videoDevices.length === 0) {
-        const option = document.createElement('option');
-        option.value = '';
-        option.textContent = 'Brak dostępnych kamer';
-        option.disabled = true;
-        select.appendChild(option);
-        return;
-      }
-
-      videoDevices.forEach((device, index) => {
-        const option = document.createElement('option');
-        // OpenCV po stronie Pythona wybiera kamerę po indeksie (0,1,2...).
-        // Dlatego w config wysyłamy indeks, a nie browserowe deviceId (string).
-        option.value = String(index);
-        option.textContent = device.label || `Kamera ${index + 1}`;
-        option.dataset.deviceId = device.deviceId;
-        select.appendChild(option);
-      });
-
-      // Przywróć poprzednią wartość jeśli istnieje
-      if (currentValue && videoDevices[Number(currentValue)]) {
-        select.value = currentValue;
-      }
-    });
-
-  } catch (error) {
-    console.error('❌ Błąd przy pobieraniu listy kamer:', error);
-    [cameraSelectFront, cameraSelectSide].forEach(select => {
-      if (select) {
-        select.innerHTML = '<option value="">Błąd dostępu do kamer</option>';
-      }
-    });
-  }
+  // Przeniesiono do Pythona w celu synchronizacji indeksów z OpenCV
 }
 
 

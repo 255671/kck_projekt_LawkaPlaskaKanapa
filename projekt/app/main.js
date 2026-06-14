@@ -171,8 +171,16 @@ async function startPythonProcesses() {
   });
 
   mediapipeProcess.stderr.on('data', (data) => {
-    const text = data.toString().trim();
-    if (text) console.error(`[MediaPipe ERROR]: ${text}`);
+    const lines = data.toString().split('\n');
+    lines.forEach(line => {
+      const text = line.trim();
+      if (text) {
+        if (text.includes("inference_feedback_manager.cc") || text.includes("Feedback manager requires a model")) {
+          return; // Ignore spam from MediaPipe C++ core
+        }
+        console.error(`[MediaPipe ERROR]: ${text}`);
+      }
+    });
   });
 
   audioProcess.stdout.on('data', (data) => {
@@ -235,6 +243,10 @@ function connect() {
     // Sprawdzamy, czy okno istnieje i czy nie zostało zniszczone
     if (win && !win.isDestroyed()) {
       const parsed = JSON.parse(data);
+      if (parsed.type === "available_cameras") {
+        win.webContents.send('available-cameras', parsed.payload);
+        return;
+      }
       win.webContents.send('mediapipe-data', parsed);
 
       // Auto-voice: jeśli nie widać całej sylwetki, poproś użytkownika o poprawę kadru.

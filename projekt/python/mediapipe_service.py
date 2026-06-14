@@ -502,8 +502,26 @@ def inference_thread_fn():
 # ---------------------------------------------------------------------------
 # WEBSOCKET SERVER
 # ---------------------------------------------------------------------------
+def get_cameras():
+    try:
+        from pygrabber.dshow_graph import FilterGraph
+        graph = FilterGraph()
+        devices = graph.get_input_devices()
+        return [{"index": i, "name": name} for i, name in enumerate(devices)]
+    except Exception as e:
+        print(f"Error getting cameras: {e}")
+        return []
+
 async def ws_handler(ws):
     print("Electron connected", flush=True)
+    try:
+        cams = get_cameras()
+        await ws.send(json.dumps({
+            "type": "available_cameras",
+            "payload": cams
+        }))
+    except Exception as e:
+        print(f"Error sending cameras list: {e}", flush=True)
 
     async def sender():
         while True:

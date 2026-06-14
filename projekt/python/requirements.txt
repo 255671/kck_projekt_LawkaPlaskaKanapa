@@ -22,3 +22,4 @@ pywin32==306
 # Additional utilities
 numpy==1.24.3
 Pillow==10.0.1
+pygrabber==0.1

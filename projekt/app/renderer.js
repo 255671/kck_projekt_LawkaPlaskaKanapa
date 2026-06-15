@@ -66,27 +66,66 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 45000) {
   }
 }
 
+let previousRepCount = 0;
+
 function updateExerciseUI(exercise) {
   if (!exercise) return;
 
   const repCount = typeof exercise.repCount === 'number' ? exercise.repCount : 0;
-  const phase = exercise.phase || '--';
+  const phase = exercise.phase || 'NOT_READY';
   const kneeAngle = exercise.metrics && typeof exercise.metrics.kneeAngle === 'number'
     ? exercise.metrics.kneeAngle
     : null;
 
-  const repCountEl = document.getElementById('rep-count');
-  const repPhaseEl = document.getElementById('rep-phase');
-  const repKneeAngleEl = document.getElementById('rep-knee-angle');
+  // New HUD Elements
+  const hudRepsEl = document.getElementById('hud-reps');
+  const hudAngleEl = document.getElementById('hud-angle');
+  const repetitionsInput = document.getElementById('repetitions-input');
+
+  // Update HUD
+  if (hudAngleEl) {
+    hudAngleEl.textContent = kneeAngle !== null ? `${kneeAngle}°` : '--°';
+  }
+
+  if (hudRepsEl) {
+    const target = repetitionsInput ? repetitionsInput.value : '10';
+    // Rep bump animation
+    if (repCount > previousRepCount) {
+      hudRepsEl.innerHTML = `${repCount} <span class="hud-target" id="hud-target-val">/ ${target}</span>`;
+      hudRepsEl.classList.remove('rep-bump');
+      void hudRepsEl.offsetWidth; // trigger reflow
+      hudRepsEl.classList.add('rep-bump');
+      
+      // Remove animation class after it finishes
+      setTimeout(() => {
+        if(hudRepsEl) hudRepsEl.classList.remove('rep-bump');
+      }, 300);
+      
+    } else if (repCount !== previousRepCount || !hudRepsEl.innerHTML.includes(target)) {
+      hudRepsEl.innerHTML = `${repCount} <span class="hud-target" id="hud-target-val">/ ${target}</span>`;
+    }
+    previousRepCount = repCount;
+  }
+
+  // Update Phase Tracker
+  const allSteps = ['NOT_READY', 'READY', 'DESCENDING', 'BOTTOM', 'ASCENDING', 'TOP'];
+  allSteps.forEach(step => {
+    const stepEl = document.getElementById(`phase-${step}`);
+    if (stepEl) {
+      if (step === phase) {
+        stepEl.classList.add('active');
+      } else {
+        stepEl.classList.remove('active');
+      }
+    }
+  });
+
+  // Update older stats (if they still exist)
   const statsRepCountEl = document.getElementById('stats-rep-count');
   const statsRepPhaseEl = document.getElementById('stats-rep-phase');
   const statsKneeAngleEl = document.getElementById('stats-knee-angle');
   const statsRepTargetEl = document.getElementById('stats-rep-target');
-  const repetitionsInput = document.getElementById('repetitions-input');
-
-  if (repCountEl) repCountEl.textContent = String(repCount);
-  if (repPhaseEl) repPhaseEl.textContent = phase;
-  if (repKneeAngleEl) repKneeAngleEl.textContent = kneeAngle !== null ? String(kneeAngle) : '--';
+  
   if (statsRepCountEl) statsRepCountEl.textContent = String(repCount);
   if (statsRepPhaseEl) statsRepPhaseEl.textContent = phase;
   if (statsKneeAngleEl) statsKneeAngleEl.textContent = kneeAngle !== null ? String(kneeAngle) : '--';

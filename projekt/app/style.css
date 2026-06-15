@@ -1,16 +1,17 @@
 :root {
-  /* Narzucona paleta kolorów, zbliżona do wygenerowanego zdjęcia */
-  --c1: #C5BE6A;
-  --c2: #9E9A6F;
-  --c3: #F0E358; /* Akcent - żółty przycisk i text */
-  --c4: #706F62;
-  --c5: #373737; /* Tło paneli */
-  --c6: #151515; /* Tło główne całej aplikacji */
+  /* Premium Fitness Palette: Deep Slate & Electric Cyan */
+  --c1: #94A3B8; /* Muted text / secondary borders */
+  --c2: #475569; /* Secondary elements */
+  --c3: #00F0FF; /* Electric Cyan Accent */
+  --c3-glow: rgba(0, 240, 255, 0.5); /* Accent Glow */
+  --c4: #334155; /* Panel hover / interactive borders */
+  --c5: #1E293B; /* Tło paneli (Slate 800) */
+  --c6: #0F172A; /* Tło główne całej aplikacji (Slate 900) */
 
-  --text-main: #FFFFFF;
-  --text-dark: #121212;
+  --text-main: #F8FAFC;
+  --text-dark: #0F172A;
 
-  --radius: 4px;
+  --radius: 8px;
   --font-family: 'Inter', sans-serif;
 }
 
@@ -408,3 +409,124 @@ pre#output {
 .hidden {
   display: none !important;
 }
+
+/* =========================================
+   LIVE HUD STYLES
+   ========================================= */
+
+.live-hud {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  margin-bottom: 24px;
+  border: 1px solid var(--c4);
+  background: linear-gradient(145deg, var(--c5) 0%, #151f32 100%);
+  box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+}
+
+.hud-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.hud-stat {
+  display: flex;
+  flex-direction: column;
+}
+
+.hud-label {
+  color: var(--c1);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 2px;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+}
+
+.hud-value {
+  font-size: 56px;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--text-main);
+  transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.hud-value.rep-bump {
+  transform: scale(1.15);
+  color: var(--c3);
+  text-shadow: 0 0 20px var(--c3-glow);
+}
+
+.hud-target {
+  font-size: 24px;
+  color: var(--c2);
+  font-weight: 600;
+}
+
+/* PHASE TRACKER */
+.hud-phase-tracker {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  position: relative;
+  background: rgba(15, 23, 42, 0.5);
+  padding: 16px;
+  border-radius: var(--radius);
+  border: 1px solid var(--c4);
+}
+
+.phase-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  z-index: 2;
+  color: var(--c2);
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  transition: all 0.3s ease;
+}
+
+.phase-step::before {
+  content: '';
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background-color: var(--c6);
+  border: 2px solid var(--c2);
+  transition: all 0.3s ease;
+}
+
+.phase-step.active {
+  color: var(--c3);
+  text-shadow: 0 0 10px var(--c3-glow);
+}
+
+.phase-step.active::before {
+  background-color: var(--c3);
+  border-color: var(--c3);
+  box-shadow: 0 0 15px var(--c3-glow);
+  transform: scale(1.3);
+}
+
+.phase-connector {
+  flex: 1;
+  height: 2px;
+  background-color: var(--c4);
+  margin: 0 8px;
+  position: relative;
+  top: -12px;
+  z-index: 1;
+}
+
+/* Subtle border around panels for premium look */
+.panel {
+  border: 1px solid var(--c4);
+}
+
+.video-frame {
+  border: 1px solid var(--c4);
+}

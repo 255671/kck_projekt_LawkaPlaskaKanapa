@@ -39,6 +39,35 @@
 
     <section class="data-column">
 
+      <!-- LIVE HUD -->
+      <div class="live-hud">
+        <div class="hud-top" style="padding: 16px 20px 0 20px;">
+          <div class="hud-stat">
+            <div class="hud-label">POWTÓRZENIA</div>
+            <div class="hud-value" id="hud-reps">0 <span class="hud-target" id="hud-target-val">/ 10</span></div>
+          </div>
+          <div class="hud-stat" style="text-align: right;">
+            <div class="hud-label">KĄT KOLANA</div>
+            <div class="hud-value" id="hud-angle" style="font-size: 36px; color: var(--c3); margin-top: 8px;">--°</div>
+          </div>
+        </div>
+        
+        <div class="hud-phase-tracker">
+          <div class="phase-step active" id="phase-NOT_READY">Oczek.</div>
+          <div class="phase-connector"></div>
+          <div class="phase-step" id="phase-READY">Gotów</div>
+          <div class="phase-connector"></div>
+          <div class="phase-step" id="phase-DESCENDING">W dół</div>
+          <div class="phase-connector"></div>
+          <div class="phase-step" id="phase-BOTTOM">Dół</div>
+          <div class="phase-connector"></div>
+          <div class="phase-step" id="phase-ASCENDING">W górę</div>
+          <div class="phase-connector"></div>
+          <div class="phase-step" id="phase-TOP">Zalicz.</div>
+        </div>
+      </div>
+
+
       <nav class="top-nav">
         <button class="nav-btn active" data-target="tab-stats">
           <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
@@ -114,16 +143,7 @@
 
 
         <div class="panel">
-          <h3 class="panel-title">KONTROLA TRENINGU</h3>
-
-          <div class="stat-row" style="margin-top: 10px;">
-            <span>Wykryte powtórzenia</span>
-            <span class="stat-num"><span id="rep-count">0</span> (<span id="rep-phase">--</span>)</span>
-          </div>
-          <div class="stat-row">
-            <span>Kąt kolana</span>
-            <span class="stat-num"><span id="rep-knee-angle">--</span>°</span>
-          </div>
+          <h3 class="panel-title">KONTROLA GŁOSOWA</h3>
 
           <div class="action-grid">
             <button id="speak-btn" class="btn btn-outline">Przeczytaj tekst</button>

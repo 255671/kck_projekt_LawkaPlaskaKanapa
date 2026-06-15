@@ -204,22 +204,25 @@ function updateExerciseUI(exercise) {
 
   if (trainingMode) {
      if (repCount > previousRepCount) {
-         // Powiększamy licznik niezależnie od tego, co MediaPipe uznało za lewą/prawą nogę
-         // z powodu częstych błędów detekcji lewo/prawo przy ustawieniu bokiem.
-         trainingState.repsDone++;
-         
-         if (trainingState.repsDone >= trainingState.targetReps) {
-             if (trainingState.targetLeg === 'right') {
-                 // Zmiana na lewą nogę
-                 trainingState.targetLeg = 'left';
-                 trainingState.repsDone = 0;
-                 document.getElementById('training-leg-label').textContent = 'Lewa noga';
-                 speakMessage("Zmień nogę. Teraz lewa noga.");
-             } else {
-                 // Koniec treningu
-                 stopTraining(true);
-                 return;
+         if (exercise.lastLeg === trainingState.targetLeg) {
+             trainingState.repsDone++;
+             
+             if (trainingState.repsDone >= trainingState.targetReps) {
+                 if (trainingState.targetLeg === 'right') {
+                     // Zmiana na lewą nogę
+                     trainingState.targetLeg = 'left';
+                     trainingState.repsDone = 0;
+                     document.getElementById('training-leg-label').textContent = 'Lewa noga';
+                     speakMessage("Zmień nogę. Teraz lewa noga.");
+                 } else {
+                     // Koniec treningu
+                     stopTraining(true);
+                     return;
+                 }
              }
+         } else {
+             console.log(`Zignorowano powtórzenie. Zrobiono: ${exercise.lastLeg}, a wymagano: ${trainingState.targetLeg}`);
+             speakMessage("Zła noga.");
          }
      }
      displayRepCount = trainingState.repsDone;

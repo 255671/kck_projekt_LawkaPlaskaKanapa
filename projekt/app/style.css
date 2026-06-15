@@ -415,7 +415,7 @@ pre#output {
    ========================================= */
 
 .live-hud {
-  display: flex;
+  display: none;
   flex-direction: column;
   gap: 24px;
   margin-bottom: 24px;
@@ -466,7 +466,7 @@ pre#output {
 
 /* PHASE TRACKER */
 .hud-phase-tracker {
-  display: flex;
+  display: none;
   justify-content: space-between;
   align-items: center;
   position: relative;
@@ -474,6 +474,10 @@ pre#output {
   padding: 16px;
   border-radius: var(--radius);
   border: 1px solid var(--c4);
+}
+
+.dashboard-container.training-active .hud-phase-tracker {
+  display: flex;
 }
 
 .phase-step {
@@ -529,4 +533,33 @@ pre#output {
 
 .video-frame {
   border: 1px solid var(--c4);
+}
+
+/* =========================================
+   TRAINING MODE (FOCUS MODE)
+   ========================================= */
+
+.dashboard-container.training-active {
+  flex-direction: column;
+}
+
+.dashboard-container.training-active .video-column {
+  flex-direction: row;
+  flex: 1; /* Takes up most of the vertical space */
+  max-height: 75vh;
+}
+
+.dashboard-container.training-active .data-column {
+  flex: 0 0 auto; /* Only takes what it needs at the bottom */
+}
+
+/* Ukrycie niepotrzebnych zakładek w trybie treningu */
+.dashboard-container.training-active .top-nav,
+.dashboard-container.training-active .tab-content {
+  display: none !important;
+}
+
+.dashboard-container.training-active .live-hud {
+  display: flex;
+  margin-bottom: 0;
 }

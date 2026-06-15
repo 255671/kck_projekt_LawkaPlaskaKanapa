@@ -275,7 +275,7 @@ class Config:
         self.front_idx, self.side_idx = 0, 0
         self.front_w, self.front_h, self.front_fps = 1280, 720, 10
         self.side_w, self.side_h, self.side_fps = 1280, 720, 10
-        self.pts_fps = 10
+        self.pts_fps = 30
         self.restart_front = False
         self.restart_side = False
 
@@ -582,6 +582,7 @@ async def ws_handler(ws):
                         "name": exercise_state["name"],
                         "repCount": exercise_state["repCount"],
                         "phase": exercise_state["phase"],
+                        "lastLeg": exercise_state["lastLeg"],
                         "metrics": ex_metrics,
                     },
                 }))

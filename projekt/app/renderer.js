@@ -67,6 +67,80 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 45000) {
 }
 
 let previousRepCount = 0;
+let previousDisplayRepCount = 0;
+
+let trainingMode = false;
+let trainingState = {
+   targetLeg: 'right', // 'right' or 'left'
+   repsDone: 0,
+   targetReps: 10,
+   startTime: null,
+   timerInterval: null
+};
+
+async function speakMessage(text) {
+  try {
+    await fetchWithTimeout(`${audioServiceUrl}/speak`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: text })
+    }, 5000);
+  } catch (e) {
+    console.log("Mowa niedostępna:", e);
+  }
+}
+
+function startTraining() {
+    trainingMode = true;
+    const repsInput = document.getElementById('repetitions-input');
+    trainingState.targetReps = repsInput ? parseInt(repsInput.value) : 10;
+    trainingState.repsDone = 0;
+    trainingState.targetLeg = 'right';
+    trainingState.startTime = Date.now();
+    previousDisplayRepCount = 0;
+
+    document.querySelector('.dashboard-container').classList.add('training-active');
+    document.getElementById('hud-training-info').classList.remove('hidden');
+    document.getElementById('hud-training-controls').classList.remove('hidden');
+    
+    document.getElementById('training-leg-label').textContent = 'Prawa noga';
+    document.getElementById('hud-reps').innerHTML = `0 <span class="hud-target" id="hud-target-val">/ ${trainingState.targetReps}</span>`;
+
+    if (trainingState.timerInterval) clearInterval(trainingState.timerInterval);
+    trainingState.timerInterval = setInterval(updateTrainingTimer, 1000);
+    
+    speakMessage("Trening rozpoczęty. Prawa noga.");
+}
+
+function updateTrainingTimer() {
+    const now = Date.now();
+    const diff = Math.floor((now - trainingState.startTime) / 1000);
+    const mins = String(Math.floor(diff / 60)).padStart(2, '0');
+    const secs = String(diff % 60).padStart(2, '0');
+    document.getElementById('training-timer').textContent = `${mins}:${secs}`;
+}
+
+function stopTraining(completed = false) {
+    trainingMode = false;
+    if (trainingState.timerInterval) clearInterval(trainingState.timerInterval);
+    
+    document.querySelector('.dashboard-container').classList.remove('training-active');
+    document.getElementById('hud-training-info').classList.add('hidden');
+    document.getElementById('hud-training-controls').classList.add('hidden');
+    
+    if (completed) {
+        const timeStr = document.getElementById('training-timer').textContent;
+        speakMessage(`Trening zakończony pomyślnie. Czas: ${timeStr}`);
+        alert(`Gratulacje! Trening zakończony. Twój czas to: ${timeStr}`);
+    } else {
+        speakMessage("Trening anulowany.");
+    }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('start-training-btn')?.addEventListener('click', startTraining);
+    document.getElementById('cancel-training-btn')?.addEventListener('click', () => stopTraining(false));
+});
 
 function updateExerciseUI(exercise) {
   if (!exercise) return;
@@ -87,11 +161,37 @@ function updateExerciseUI(exercise) {
     hudAngleEl.textContent = kneeAngle !== null ? `${kneeAngle}°` : '--°';
   }
 
+  // --- LOGIKA PĘTLI TRENINGU ---
+  let displayRepCount = repCount;
+  const target = repetitionsInput ? repetitionsInput.value : '10';
+
+  if (trainingMode) {
+     if (repCount > previousRepCount) {
+         // Powiększamy licznik niezależnie od tego, co MediaPipe uznało za lewą/prawą nogę
+         // z powodu częstych błędów detekcji lewo/prawo przy ustawieniu bokiem.
+         trainingState.repsDone++;
+         
+         if (trainingState.repsDone >= trainingState.targetReps) {
+             if (trainingState.targetLeg === 'right') {
+                 // Zmiana na lewą nogę
+                 trainingState.targetLeg = 'left';
+                 trainingState.repsDone = 0;
+                 document.getElementById('training-leg-label').textContent = 'Lewa noga';
+                 speakMessage("Zmień nogę. Teraz lewa noga.");
+             } else {
+                 // Koniec treningu
+                 stopTraining(true);
+                 return;
+             }
+         }
+     }
+     displayRepCount = trainingState.repsDone;
+  }
+
   if (hudRepsEl) {
-    const target = repetitionsInput ? repetitionsInput.value : '10';
     // Rep bump animation
-    if (repCount > previousRepCount) {
-      hudRepsEl.innerHTML = `${repCount} <span class="hud-target" id="hud-target-val">/ ${target}</span>`;
+    if (displayRepCount > previousDisplayRepCount) {
+      hudRepsEl.innerHTML = `${displayRepCount} <span class="hud-target" id="hud-target-val">/ ${target}</span>`;
       hudRepsEl.classList.remove('rep-bump');
       void hudRepsEl.offsetWidth; // trigger reflow
       hudRepsEl.classList.add('rep-bump');
@@ -101,11 +201,12 @@ function updateExerciseUI(exercise) {
         if(hudRepsEl) hudRepsEl.classList.remove('rep-bump');
       }, 300);
       
-    } else if (repCount !== previousRepCount || !hudRepsEl.innerHTML.includes(target)) {
-      hudRepsEl.innerHTML = `${repCount} <span class="hud-target" id="hud-target-val">/ ${target}</span>`;
+    } else if (displayRepCount !== previousDisplayRepCount || !hudRepsEl.innerHTML.includes(target)) {
+      hudRepsEl.innerHTML = `${displayRepCount} <span class="hud-target" id="hud-target-val">/ ${target}</span>`;
     }
-    previousRepCount = repCount;
+    previousDisplayRepCount = displayRepCount;
   }
+  previousRepCount = repCount;
 
   // Update Phase Tracker
   const allSteps = ['NOT_READY', 'READY', 'DESCENDING', 'BOTTOM', 'ASCENDING', 'TOP'];

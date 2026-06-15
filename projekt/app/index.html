@@ -46,9 +46,17 @@
             <div class="hud-label">POWTÓRZENIA</div>
             <div class="hud-value" id="hud-reps">0 <span class="hud-target" id="hud-target-val">/ 10</span></div>
           </div>
-          <div class="hud-stat" style="text-align: right;">
+          <div class="hud-stat" style="text-align: right;" id="hud-angle-container">
             <div class="hud-label">KĄT KOLANA</div>
             <div class="hud-value" id="hud-angle" style="font-size: 36px; color: var(--c3); margin-top: 8px;">--°</div>
+          </div>
+          
+          <div class="hud-training-info hidden" id="hud-training-info" style="text-align: center; flex: 1;">
+             <div class="hud-label" style="color: var(--c3);">TRENING TRWA</div>
+             <div class="training-details" style="display: flex; flex-direction: column; align-items: center; gap: 5px;">
+                <span id="training-leg-label" style="font-size: 24px; font-weight: 700; color: #FFF;">Prawa noga</span>
+                <span class="timer" id="training-timer" style="font-size: 32px; font-weight: 800; font-variant-numeric: tabular-nums;">00:00</span>
+             </div>
           </div>
         </div>
         
@@ -64,6 +72,10 @@
           <div class="phase-step" id="phase-ASCENDING">W górę</div>
           <div class="phase-connector"></div>
           <div class="phase-step" id="phase-TOP">Zalicz.</div>
+        </div>
+
+        <div class="hud-training-controls hidden" id="hud-training-controls" style="padding: 0 20px 16px 20px; display: flex; justify-content: flex-end;">
+            <button id="cancel-training-btn" class="btn btn-outline" style="border-color: #ED1717; color: #ED1717;">Anuluj trening</button>
         </div>
       </div>
 
@@ -137,7 +149,7 @@
                 <button id="toggle-camera-btn" class="btn btn-outline">
                   <span>Pokaż kamerę</span>
                 </button>
-                <button class="btn btn-accent">Podejmij próbę</button>
+                <button id="start-training-btn" class="btn btn-accent">Podejmij próbę</button>
              </div>
           </div>
 

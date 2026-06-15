@@ -68,6 +68,7 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 45000) {
 
 let previousRepCount = 0;
 let previousDisplayRepCount = 0;
+let lastPostureSpokenAtMs = 0;
 
 let trainingMode = false;
 let trainingState = {
@@ -75,8 +76,10 @@ let trainingState = {
    repsDone: 0,
    targetReps: 10,
    startTime: null,
-   timerInterval: null
+   timerInterval: null,
+   errors: 0
 };
+let errorCountedThisRep = false;
 
 async function speakMessage(text) {
   try {
@@ -135,12 +138,17 @@ async function beginActualTraining() {
     const repsInput = document.getElementById('repetitions-input');
     trainingState.targetReps = repsInput ? parseInt(repsInput.value) : 10;
     trainingState.repsDone = 0;
+    trainingState.errors = 0;
+    errorCountedThisRep = false;
     trainingState.targetLeg = 'right';
     trainingState.startTime = Date.now();
     previousDisplayRepCount = 0;
 
     document.getElementById('training-leg-label').textContent = 'Prawa noga';
     document.getElementById('hud-reps').innerHTML = `0 <span class="hud-target" id="hud-target-val">/ ${trainingState.targetReps}</span>`;
+    
+    const errEl = document.getElementById('hud-errors');
+    if(errEl) errEl.textContent = '0';
 
     if (trainingState.timerInterval) clearInterval(trainingState.timerInterval);
     trainingState.timerInterval = setInterval(updateTrainingTimer, 1000);
@@ -167,8 +175,32 @@ function stopTraining(completed = false) {
     
     if (completed) {
         const timeStr = document.getElementById('training-timer').textContent;
-        speakMessage(`Trening zakończony pomyślnie. Czas: ${timeStr}`);
-        alert(`Gratulacje! Trening zakończony. Twój czas to: ${timeStr}`);
+        const totalReps = trainingState.targetReps * 2; // Lewa + Prawa
+        const totalErrors = trainingState.errors;
+        
+        document.getElementById('summary-time').textContent = timeStr;
+        document.getElementById('summary-reps').textContent = `${totalReps} łącznie`;
+        document.getElementById('summary-errors').textContent = totalErrors;
+        
+        let rating = "Idealnie!";
+        let ratingColor = "var(--c3)";
+        if (totalErrors > 0 && totalErrors <= 3) {
+            rating = "Dobrze";
+            ratingColor = "var(--c2)";
+        } else if (totalErrors > 3) {
+            rating = "Do poprawy";
+            ratingColor = "#ff4444";
+        }
+        
+        const ratingEl = document.getElementById('summary-rating');
+        if (ratingEl) {
+            ratingEl.textContent = rating;
+            ratingEl.style.color = ratingColor;
+        }
+        
+        document.getElementById('summary-overlay').classList.remove('hidden');
+        
+        speakMessage(`Trening zakończony pomyślnie. Czas: ${timeStr}. Zarejestrowane błędy: ${totalErrors}.`);
     } else {
         speakMessage("Trening anulowany.");
     }
@@ -177,6 +209,11 @@ function stopTraining(completed = false) {
 document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('start-training-btn')?.addEventListener('click', startTraining);
     document.getElementById('cancel-training-btn')?.addEventListener('click', () => stopTraining(false));
+    
+    // Przycisk zamykający okienko podsumowania
+    document.getElementById('summary-close-btn')?.addEventListener('click', () => {
+        document.getElementById('summary-overlay').classList.add('hidden');
+    });
 });
 
 function updateExerciseUI(exercise) {
@@ -203,6 +240,26 @@ function updateExerciseUI(exercise) {
   const target = repetitionsInput ? repetitionsInput.value : '10';
 
   if (trainingMode) {
+     if (phase === 'READY') {
+         errorCountedThisRep = false;
+     }
+
+     // Alert o postawie w każdej chwili podczas treningu
+     if (exercise.metrics && exercise.metrics.badPosture) {
+         if (['DESCENDING', 'BOTTOM', 'ASCENDING'].includes(phase) && !errorCountedThisRep) {
+             errorCountedThisRep = true;
+             trainingState.errors++;
+             const errEl = document.getElementById('hud-errors');
+             if(errEl) errEl.textContent = trainingState.errors;
+         }
+
+         const now = Date.now();
+         if (now - lastPostureSpokenAtMs > 8000) {
+             lastPostureSpokenAtMs = now;
+             speakMessage("Wyprostuj plecy.");
+         }
+     }
+
      if (repCount > previousRepCount) {
          if (exercise.lastLeg === trainingState.targetLeg) {
              trainingState.repsDone++;

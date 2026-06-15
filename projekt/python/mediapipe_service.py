@@ -103,33 +103,35 @@ def _lm_visible(lm, min_visibility: float = 0.25) -> bool:
     return visibility >= min_visibility
 
 
-def _leg_metrics(pts, hip_i, knee_i, ankle_i, side_name):
+def _leg_metrics(pts, shoulder_i, hip_i, knee_i, ankle_i, side_name):
     if not pts or len(pts) <= ankle_i:
         return None
-    hip, knee, ankle = pts[hip_i], pts[knee_i], pts[ankle_i]
+    shoulder, hip, knee, ankle = pts[shoulder_i], pts[hip_i], pts[knee_i], pts[ankle_i]
     if not (_lm_visible(hip) and _lm_visible(knee) and _lm_visible(ankle)):
         return None
+    sx, sy = _lm_xy(shoulder)
     hx, hy = _lm_xy(hip)
     kx, ky = _lm_xy(knee)
     ax, ay = _lm_xy(ankle)
     if None in (hx, hy, kx, ky, ax, ay):
         return None
     knee_angle = _angle_deg((hx, hy), (kx, ky), (ax, ay))
+    hip_angle = _angle_deg((sx, sy), (hx, hy), (kx, ky)) if None not in (sx, sy) else None
     if knee_angle != knee_angle:
         return None
     return {
         "side": side_name,
         "knee_angle": knee_angle,
+        "hip_angle": hip_angle,
         "ankle_y": ay,
         "ankle_x": ax,
         "hip_y": hy,
         "knee_y": ky,
     }
 
-
 def _analyze_bulgarian_pose(pts):
-    left = _leg_metrics(pts, 23, 25, 27, "left")
-    right = _leg_metrics(pts, 24, 26, 28, "right")
+    left = _leg_metrics(pts, 11, 23, 25, 27, "left")
+    right = _leg_metrics(pts, 12, 24, 26, 28, "right")
     legs = [l for l in (left, right) if l is not None]
     if len(legs) < 2:
         return None
@@ -144,6 +146,7 @@ def _analyze_bulgarian_pose(pts):
         "elevation": elevation,
         "front_knee_angle": front["knee_angle"],
         "back_knee_angle": back["knee_angle"],
+        "front_hip_angle": front["hip_angle"],
         "front_leg": front["side"],
     }
 
@@ -164,6 +167,13 @@ def update_bulgarian_squat(pts_prefer_side, pts_fallback_front):
     source = "side" if pts_prefer_side else "front"
 
     pose = _analyze_bulgarian_pose(pts)
+    
+    # Niezależnie od kamery śledzącej ruch, używamy przedniej kamery do 
+    # niezawodnego rozróżniania lewej/prawej nogi (nie zasłaniają się).
+    if pose is not None and pts_fallback_front is not None:
+        pose_front = _analyze_bulgarian_pose(pts_fallback_front)
+        if pose_front is not None:
+            pose["front_leg"] = pose_front["front_leg"]
     # W trakcie ruchu usuwamy wymóg BACK_KNEE_MIN, zeby naturalne mocne zgięcie nogi na ławce nie psuło trackingu
     if pose is None or pose["elevation"] < ELEVATION_MIN:
         if exercise_state["sm_state"] != "NOT_READY":
@@ -254,15 +264,39 @@ def update_bulgarian_squat(pts_prefer_side, pts_fallback_front):
         exercise_state["sm_state"] = "READY"
         exercise_state["confirm_frames"] = 0
 
+    bad_posture = False
+    
+    # Detekcja prostej postawy z kamery przedniej (brak pochyleń na boki)
+    if pts_fallback_front:
+        s_left, s_right = pts_fallback_front[11], pts_fallback_front[12]
+        h_left, h_right = pts_fallback_front[23], pts_fallback_front[24]
+        if _lm_visible(s_left) and _lm_visible(s_right) and _lm_visible(h_left) and _lm_visible(h_right):
+            mid_shoulder_x = (s_left.x + s_right.x) / 2
+            mid_hip_x = (h_left.x + h_right.x) / 2
+            if abs(mid_shoulder_x - mid_hip_x) > 0.05:
+                bad_posture = True
+                
+    # Detekcja prostej postawy z kamery bocznej (w pełni pionowe plecy)
+    if pts_prefer_side:
+        front_leg = pose["front_leg"]
+        s_idx = 11 if front_leg == "left" else 12
+        h_idx = 23 if front_leg == "left" else 24
+        s_lm = pts_prefer_side[s_idx]
+        h_lm = pts_prefer_side[h_idx]
+        if _lm_visible(s_lm) and _lm_visible(h_lm):
+            if abs(s_lm.x - h_lm.x) > 0.07:
+                bad_posture = True
+
     exercise_state["phase"] = exercise_state["sm_state"]
-    exercise_state["lastMetrics"] = _metrics(pose, source)
+    exercise_state["lastMetrics"] = _metrics(pose, source, bad_posture)
     return exercise_state["lastMetrics"]
 
-
-def _metrics(pose, source):
+def _metrics(pose, source, bad_posture):
     return {
         "kneeAngle": round(pose["front_knee_angle"], 1),
         "backKneeAngle": round(pose["back_knee_angle"], 1),
+        "hipAngle": round(pose["front_hip_angle"], 1) if pose.get("front_hip_angle") else None,
+        "badPosture": bad_posture,
         "leg": pose["front_leg"],
         "source": source,
         "elevation": round(pose["elevation"], 3)

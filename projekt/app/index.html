@@ -51,6 +51,11 @@
             <div class="hud-value" id="hud-angle" style="font-size: 36px; color: var(--c3); margin-top: 8px;">--°</div>
           </div>
           
+          <div class="hud-stat">
+            <div class="hud-label">BŁĘDY</div>
+            <div class="hud-value" style="color: #ff4444;" id="hud-errors">0</div>
+          </div>
+
           <div class="hud-training-info hidden" id="hud-training-info" style="text-align: center; flex: 1;">
              <div class="hud-label" style="color: var(--c3);">TRENING TRWA</div>
              <div class="training-details" style="display: flex; flex-direction: column; align-items: center; gap: 5px;">
@@ -286,7 +291,36 @@
           <h3 class="panel-title">DEBUGOWANIE CONFIG SERVICE</h3>
           <pre id="config-debug" class="config-debug" style="max-height: 300px; overflow: auto; background: #1e1e1e; padding: 10px; border-radius: 4px; font-size: 11px; color: #0f0;">Loading...</pre>
         </div>
+        </div>
       </div> </section>
+  </div>
+
+  <!-- SUMMARY OVERLAY -->
+  <div id="summary-overlay" class="hidden" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15, 23, 42, 0.95); z-index: 9999; display: flex; justify-content: center; align-items: center; flex-direction: column; backdrop-filter: blur(8px);">
+    <div class="panel" style="max-width: 600px; width: 90%; text-align: center; padding: 40px; box-shadow: 0 20px 50px rgba(0,0,0,0.5);">
+      <h2 style="color: var(--c3); font-size: 36px; margin-bottom: 30px;">TRENING ZAKOŃCZONY!</h2>
+      
+      <div class="action-grid" style="grid-template-columns: 1fr 1fr; margin-bottom: 30px; text-align: left; gap: 20px;">
+        <div class="form-group" style="background: rgba(0,0,0,0.2); padding: 15px; border-radius: 8px;">
+          <label style="color: #999;">Czas trwania:</label>
+          <div id="summary-time" style="font-size: 24px; color: #fff; font-weight: bold;">00:00</div>
+        </div>
+        <div class="form-group" style="background: rgba(0,0,0,0.2); padding: 15px; border-radius: 8px;">
+          <label style="color: #999;">Powtórzenia (Lewa + Prawa):</label>
+          <div id="summary-reps" style="font-size: 24px; color: #fff; font-weight: bold;">0</div>
+        </div>
+        <div class="form-group" style="background: rgba(0,0,0,0.2); padding: 15px; border-radius: 8px;">
+          <label style="color: #999;">Popełnione błędy (postawa):</label>
+          <div id="summary-errors" style="font-size: 24px; color: #ff4444; font-weight: bold;">0</div>
+        </div>
+        <div class="form-group" style="background: rgba(0,0,0,0.2); padding: 15px; border-radius: 8px;">
+          <label style="color: #999;">Ocena postawy:</label>
+          <div id="summary-rating" style="font-size: 24px; color: var(--c3); font-weight: bold;">Idealnie</div>
+        </div>
+      </div>
+
+      <button id="summary-close-btn" class="btn btn-accent btn-full" style="font-size: 18px; padding: 15px;">Wróć do ekranu głównego</button>
+    </div>
   </div>
 
   <script src="config-service.js"></script>

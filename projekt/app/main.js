@@ -249,30 +249,7 @@ function connect() {
       }
       win.webContents.send('mediapipe-data', parsed);
 
-      // Auto-voice: jeśli nie widać całej sylwetki, poproś użytkownika o poprawę kadru.
-      // Throttle + streak, żeby nie spamować.
-      try {
-        const camerasEnabled = parsed && (parsed.image || parsed.imageSide);
-        const fullFront = parsed?.fullBodyVisibleFront;
-        const fullSide = parsed?.fullBodyVisibleSide;
-        const fullBodyOk = (fullFront === true) || (fullSide === true);
-
-        if (camerasEnabled && !fullBodyOk) {
-          bodyNotVisibleStreak += 1;
-        } else {
-          bodyNotVisibleStreak = 0;
-        }
-
-        const now = Date.now();
-        if (bodyNotVisibleStreak >= 15 && (now - lastBodyNotVisibleSpokenAtMs) > 12000) {
-          lastBodyNotVisibleSpokenAtMs = now;
-          bodyNotVisibleStreak = 0;
-          speakViaAudioService('Proszę ustawić się tak, aby było widać całą sylwetkę w kadrze.', lastAudioLanguage)
-            .catch(() => {});
-        }
-      } catch {
-        // ignore
-      }
+      // Auto-voice o ustawieniu sylwetki usunięto stąd do renderer.js, by odpalać go tylko w trybie treningu.
     }
   });
 }

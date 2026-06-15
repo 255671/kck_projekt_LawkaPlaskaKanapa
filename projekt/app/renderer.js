@@ -90,7 +90,47 @@ async function speakMessage(text) {
   }
 }
 
-function startTraining() {
+let countdownInterval = null;
+
+async function startTraining() {
+    const countdownInput = document.getElementById('countdown-input');
+    let countdownVal = countdownInput ? parseInt(countdownInput.value) : 5;
+    
+    document.querySelector('.dashboard-container').classList.add('training-active');
+    
+    // Pokaż główne elementy kontrolne (HUD timera) od razu, by układ nie skakał
+    document.getElementById('hud-training-info').classList.remove('hidden');
+    document.getElementById('hud-training-controls').classList.remove('hidden');
+    document.getElementById('training-leg-label').textContent = 'Przygotowanie...';
+    
+    const formatTime = (secs) => {
+        const m = String(Math.floor(secs / 60)).padStart(2, '0');
+        const s = String(secs % 60).padStart(2, '0');
+        return `${m}:${s}`;
+    };
+    
+    document.getElementById('training-timer').textContent = formatTime(countdownVal);
+    
+    if (countdownVal > 0) {
+        // Zaczekaj z odliczaniem aż asystent skończy mówić
+        await speakMessage(`Ustaw się. Trening zacznie się za ${countdownVal} sekund.`);
+        
+        if (countdownInterval) clearInterval(countdownInterval);
+        countdownInterval = setInterval(() => {
+            countdownVal--;
+            document.getElementById('training-timer').textContent = formatTime(countdownVal);
+            
+            if (countdownVal <= 0) {
+                clearInterval(countdownInterval);
+                beginActualTraining();
+            }
+        }, 1000);
+    } else {
+        beginActualTraining();
+    }
+}
+
+async function beginActualTraining() {
     trainingMode = true;
     const repsInput = document.getElementById('repetitions-input');
     trainingState.targetReps = repsInput ? parseInt(repsInput.value) : 10;
@@ -99,17 +139,13 @@ function startTraining() {
     trainingState.startTime = Date.now();
     previousDisplayRepCount = 0;
 
-    document.querySelector('.dashboard-container').classList.add('training-active');
-    document.getElementById('hud-training-info').classList.remove('hidden');
-    document.getElementById('hud-training-controls').classList.remove('hidden');
-    
     document.getElementById('training-leg-label').textContent = 'Prawa noga';
     document.getElementById('hud-reps').innerHTML = `0 <span class="hud-target" id="hud-target-val">/ ${trainingState.targetReps}</span>`;
 
     if (trainingState.timerInterval) clearInterval(trainingState.timerInterval);
     trainingState.timerInterval = setInterval(updateTrainingTimer, 1000);
     
-    speakMessage("Trening rozpoczęty. Prawa noga.");
+    speakMessage("Start! Prawa noga.");
 }
 
 function updateTrainingTimer() {
@@ -122,6 +158,7 @@ function updateTrainingTimer() {
 
 function stopTraining(completed = false) {
     trainingMode = false;
+    if (countdownInterval) clearInterval(countdownInterval);
     if (trainingState.timerInterval) clearInterval(trainingState.timerInterval);
     
     document.querySelector('.dashboard-container').classList.remove('training-active');

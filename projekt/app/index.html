@@ -189,6 +189,14 @@
             <h3 class="panel-title">PARAMETRY SYSTEMU</h3>
 
             <div class="form-group">
+              <label for="theme-select">Motyw aplikacji:</label>
+              <select id="theme-select" class="form-control">
+                <option value="light">Jasny (Light Monochrome)</option>
+                <option value="dark">Ciemny (Neon Cyberpunk)</option>
+              </select>
+            </div>
+
+            <div class="form-group">
               <label for="language-select">Język mowy:</label>
               <select id="language-select" class="form-control">
                 <option value="pl-PL">Polski</option>
@@ -204,8 +212,8 @@
             </div>
 
             <div class="form-group">
-              <label for="speech-rate-slider">Szybkość: <span id="speech-rate-display" class="value-highlight">150</span></label>
-              <input type="range" id="speech-rate-slider" class="range-slider" min="50" max="300" value="150" step="10">
+              <label for="speech-rate-slider">Szybkość: <span id="speech-rate-display" class="value-highlight">1x</span></label>
+              <input type="range" id="speech-rate-slider" class="range-slider" min="0.5" max="2.0" value="1.0" step="0.5">
             </div>
 
             <button id="save-settings-btn" class="btn btn-outline btn-full mt-10">Zapisz ustawienia</button>
@@ -241,61 +249,35 @@
 
         </div>
 
-        <div class="panel">
-          <h3 class="panel-title">DEBUGOWANIE AUDIO</h3>
-
-          <div class="form-group">
-            <label for="mic-select">Mikrofon:</label>
-            <select id="mic-select" class="form-control">
-              <option value="">Domyślny</option>
-            </select>
-          </div>
-
-          <div class="action-grid mt-10 mb-10">
-            <button id="calibrate-btn" class="btn btn-outline">Kalibruj</button>
-            <button id="start-audio-debug-btn" class="btn btn-accent">Start nasłuchu</button>
-            <button id="stop-audio-debug-btn" class="btn btn-outline hidden" style="border-color: #ED1717;">Stop nasłuchu</button>
-          </div>
-
-          <div class="audio-monitor">
-            <div class="audio-level-container">
-              <div id="audio-level-bar" class="audio-level-bar"></div>
-            </div>
-            <div class="audio-status-text">
-              <span id="audio-level-text">Poziom: 0%</span>
-            </div>
-            <div id="audio-debug-info" class="audio-debug-info mt-5">Czekam na kalibrację...</div>
-          </div>
-        </div>
-
-        <div class="panel">
-          <h3 class="panel-title">DEBUGOWANIE CONFIG SERVICE</h3>
-          <pre id="config-debug" class="config-debug" style="max-height: 300px; overflow: auto; background: #1e1e1e; padding: 10px; border-radius: 4px; font-size: 11px; color: #0f0;">Loading...</pre>
-        </div>
         </div>
       </div> </section>
   </div>
 
+  <!-- GLOBAL START BUTTON -->
+  <button id="global-start-btn" style="position: fixed; bottom: 30px; right: 30px; background: var(--c3); border: none; color: var(--c6); border-radius: 50%; width: 80px; height: 80px; font-size: 16px; font-weight: bold; box-shadow: 0 10px 20px var(--c3-glow); z-index: 1000; cursor: pointer; transition: transform 0.2s, background 0.2s; display: flex; justify-content: center; align-items: center; text-shadow: none;">
+    START
+  </button>
+
   <!-- SUMMARY OVERLAY -->
-  <div id="summary-overlay" class="hidden" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15, 23, 42, 0.95); z-index: 9999; display: flex; justify-content: center; align-items: center; flex-direction: column; backdrop-filter: blur(8px);">
-    <div class="panel" style="max-width: 600px; width: 90%; text-align: center; padding: 40px; box-shadow: 0 20px 50px rgba(0,0,0,0.5);">
+  <div id="summary-overlay" class="hidden" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: var(--overlay-bg); z-index: 9999; display: flex; justify-content: center; align-items: center; flex-direction: column; backdrop-filter: blur(8px);">
+    <div class="panel" style="max-width: 600px; width: 90%; text-align: center; padding: 40px; box-shadow: 0 20px 50px rgba(0,0,0,0.1);">
       <h2 style="color: var(--c3); font-size: 36px; margin-bottom: 30px;">TRENING ZAKOŃCZONY!</h2>
       
       <div class="action-grid" style="grid-template-columns: 1fr 1fr; margin-bottom: 30px; text-align: left; gap: 20px;">
-        <div class="form-group" style="background: rgba(0,0,0,0.2); padding: 15px; border-radius: 8px;">
-          <label style="color: #999;">Czas trwania:</label>
-          <div id="summary-time" style="font-size: 24px; color: #fff; font-weight: bold;">00:00</div>
+        <div class="form-group" style="background: rgba(0,0,0,0.05); padding: 15px; border-radius: 8px;">
+          <label style="color: var(--c1);">Czas trwania:</label>
+          <div id="summary-time" style="font-size: 24px; color: var(--text-main); font-weight: bold;">00:00</div>
         </div>
-        <div class="form-group" style="background: rgba(0,0,0,0.2); padding: 15px; border-radius: 8px;">
-          <label style="color: #999;">Powtórzenia (Lewa + Prawa):</label>
-          <div id="summary-reps" style="font-size: 24px; color: #fff; font-weight: bold;">0</div>
+        <div class="form-group" style="background: rgba(0,0,0,0.05); padding: 15px; border-radius: 8px;">
+          <label style="color: var(--c1);">Powtórzenia (Lewa + Prawa):</label>
+          <div id="summary-reps" style="font-size: 24px; color: var(--text-main); font-weight: bold;">0</div>
         </div>
-        <div class="form-group" style="background: rgba(0,0,0,0.2); padding: 15px; border-radius: 8px;">
-          <label style="color: #999;">Popełnione błędy (postawa):</label>
+        <div class="form-group" style="background: rgba(0,0,0,0.05); padding: 15px; border-radius: 8px;">
+          <label style="color: var(--c1);">Popełnione błędy (postawa):</label>
           <div id="summary-errors" style="font-size: 24px; color: #ff4444; font-weight: bold;">0</div>
         </div>
-        <div class="form-group" style="background: rgba(0,0,0,0.2); padding: 15px; border-radius: 8px;">
-          <label style="color: #999;">Ocena postawy:</label>
+        <div class="form-group" style="background: rgba(0,0,0,0.05); padding: 15px; border-radius: 8px;">
+          <label style="color: var(--c1);">Ocena postawy:</label>
           <div id="summary-rating" style="font-size: 24px; color: var(--c3); font-weight: bold;">Idealnie</div>
         </div>
       </div>
@@ -305,15 +287,29 @@
   </div>
 
   <!-- DELETE CONFIRM OVERLAY -->
-  <div id="delete-confirm-overlay" class="hidden" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15, 23, 42, 0.95); z-index: 10000; display: flex; justify-content: center; align-items: center; flex-direction: column; backdrop-filter: blur(8px);">
-    <div class="panel" style="max-width: 400px; width: 90%; text-align: center; padding: 30px; box-shadow: 0 20px 50px rgba(0,0,0,0.5);">
+  <div id="delete-confirm-overlay" class="hidden" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: var(--overlay-bg); z-index: 10000; display: flex; justify-content: center; align-items: center; flex-direction: column; backdrop-filter: blur(8px);">
+    <div class="panel" style="max-width: 400px; width: 90%; text-align: center; padding: 30px; box-shadow: 0 20px 50px rgba(0,0,0,0.1);">
       <h3 style="color: #ff4444; font-size: 24px; margin-bottom: 20px;">POTWIERDZENIE</h3>
-      <p style="color: #ccc; margin-bottom: 30px; font-size: 16px;">Czy na pewno chcesz usunąć ten trening? Tej operacji nie można cofnąć.</p>
+      <p style="color: var(--c1); margin-bottom: 30px; font-size: 16px;">Czy na pewno chcesz usunąć ten trening? Tej operacji nie można cofnąć.</p>
       
       <div class="action-grid" style="grid-template-columns: 1fr 1fr; gap: 15px;">
-        <button id="delete-cancel-btn" class="btn btn-outline" style="border-color: #666; color: #ccc;">Anuluj</button>
+        <button id="delete-cancel-btn" class="btn btn-outline" style="border-color: var(--c1); color: var(--text-main);">Anuluj</button>
         <button id="delete-confirm-btn" class="btn btn-accent" style="background: #ff4444; border-color: #ff4444; color: #fff;">Usuń trening</button>
       </div>
+    </div>
+  </div>
+
+  <!-- WORKOUT DETAILS OVERLAY -->
+  <div id="workout-details-overlay" class="hidden" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: var(--overlay-bg); z-index: 10000; display: flex; justify-content: center; align-items: center; flex-direction: column; backdrop-filter: blur(8px);">
+    <div class="panel" style="max-width: 500px; width: 90%; text-align: left; padding: 30px; box-shadow: 0 20px 50px rgba(0,0,0,0.1); max-height: 80vh; display: flex; flex-direction: column;">
+      <h3 style="color: var(--text-main); font-size: 24px; margin-bottom: 5px;">SZCZEGÓŁY TRENINGU</h3>
+      <div id="details-header-info" style="color: var(--c1); margin-bottom: 20px; font-size: 14px;">Data: -- | Czas: --</div>
+      
+      <div id="details-reps-list" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px;">
+        <!-- Injectowane z JS -->
+      </div>
+      
+      <button id="details-close-btn" class="btn btn-outline btn-full" style="font-size: 16px; padding: 12px; margin-top: auto;">Zamknij</button>
     </div>
   </div>
 

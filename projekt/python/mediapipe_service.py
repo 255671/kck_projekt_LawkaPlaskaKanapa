@@ -264,7 +264,7 @@ def update_bulgarian_squat(pts_prefer_side, pts_fallback_front):
         exercise_state["sm_state"] = "READY"
         exercise_state["confirm_frames"] = 0
 
-    bad_posture = False
+    posture_error = ""
     
     # Detekcja prostej postawy z kamery przedniej (brak pochyleń na boki)
     if pts_fallback_front:
@@ -274,7 +274,7 @@ def update_bulgarian_squat(pts_prefer_side, pts_fallback_front):
             mid_shoulder_x = (s_left.x + s_right.x) / 2
             mid_hip_x = (h_left.x + h_right.x) / 2
             if abs(mid_shoulder_x - mid_hip_x) > 0.05:
-                bad_posture = True
+                posture_error = "Pochylenie tułowia"
                 
     # Detekcja prostej postawy z kamery bocznej (w pełni pionowe plecy)
     if pts_prefer_side:
@@ -285,18 +285,21 @@ def update_bulgarian_squat(pts_prefer_side, pts_fallback_front):
         h_lm = pts_prefer_side[h_idx]
         if _lm_visible(s_lm) and _lm_visible(h_lm):
             if abs(s_lm.x - h_lm.x) > 0.07:
-                bad_posture = True
+                posture_error = "Krzywe plecy (garb)"
+
+    bad_posture = bool(posture_error)
 
     exercise_state["phase"] = exercise_state["sm_state"]
-    exercise_state["lastMetrics"] = _metrics(pose, source, bad_posture)
+    exercise_state["lastMetrics"] = _metrics(pose, source, bad_posture, posture_error)
     return exercise_state["lastMetrics"]
 
-def _metrics(pose, source, bad_posture):
+def _metrics(pose, source, bad_posture, posture_error=""):
     return {
         "kneeAngle": round(pose["front_knee_angle"], 1),
         "backKneeAngle": round(pose["back_knee_angle"], 1),
         "hipAngle": round(pose["front_hip_angle"], 1) if pose.get("front_hip_angle") else None,
         "badPosture": bad_posture,
+        "postureErrorType": posture_error,
         "leg": pose["front_leg"],
         "source": source,
         "elevation": round(pose["elevation"], 3)

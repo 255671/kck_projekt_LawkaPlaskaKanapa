@@ -12,9 +12,10 @@ let isAudioOperationInProgress = false;
 
 // Domyślne ustawienia
 const defaultSettings = {
+  theme: 'light',
   language: 'pl-PL',
   volume: 100,
-  speechRate: 150
+  speechRate: 1.0
 };
 
 // Funkcje zarządzania ustawieniami
@@ -38,11 +39,18 @@ function saveSettings(settings) {
 }
 
 function applySettingsToUI(settings) {
+  const theme = settings.theme || 'light';
+  document.documentElement.setAttribute('data-theme', theme);
+  const themeSelect = document.getElementById('theme-select');
+  if (themeSelect) themeSelect.value = theme;
+
   document.getElementById('language-select').value = settings.language;
   document.getElementById('volume-slider').value = settings.volume;
   document.getElementById('volume-display').textContent = settings.volume + '%';
   document.getElementById('speech-rate-slider').value = settings.speechRate;
-  document.getElementById('speech-rate-display').textContent = settings.speechRate;
+  document.getElementById('speech-rate-display').textContent = settings.speechRate + 'x';
+  
+  if (typeof loadHistory === 'function') loadHistory();
 }
 
 // Helper do fetch z timeoutem
@@ -77,7 +85,8 @@ let trainingState = {
    targetReps: 10,
    startTime: null,
    timerInterval: null,
-   errors: 0
+   errors: 0,
+   repDetails: []
 };
 let errorCountedThisRep = false;
 
@@ -100,6 +109,9 @@ async function startTraining() {
     let countdownVal = countdownInput ? parseInt(countdownInput.value) : 5;
     
     document.querySelector('.dashboard-container').classList.add('training-active');
+    
+    const globalStartBtn = document.getElementById('global-start-btn');
+    if (globalStartBtn) globalStartBtn.style.display = 'none';
     
     // Pokaż główne elementy kontrolne (HUD timera) od razu, by układ nie skakał
     document.getElementById('hud-training-info').classList.remove('hidden');
@@ -139,10 +151,12 @@ async function beginActualTraining() {
     trainingState.targetReps = repsInput ? parseInt(repsInput.value) : 10;
     trainingState.repsDone = 0;
     trainingState.errors = 0;
-    errorCountedThisRep = false;
     trainingState.targetLeg = 'right';
     trainingState.startTime = Date.now();
-    previousDisplayRepCount = 0;
+    trainingState.repDetails = [];
+    trainingState.currentRepErrorType = "";
+    errorCountedThisRep = false;
+    previousRepCount = 0;
 
     document.getElementById('training-leg-label').textContent = 'Prawa noga';
     document.getElementById('hud-reps').innerHTML = `0 <span class="hud-target" id="hud-target-val">/ ${trainingState.targetReps}</span>`;
@@ -170,6 +184,10 @@ function stopTraining(completed = false) {
     if (trainingState.timerInterval) clearInterval(trainingState.timerInterval);
     
     document.querySelector('.dashboard-container').classList.remove('training-active');
+    
+    const globalStartBtn = document.getElementById('global-start-btn');
+    if (globalStartBtn) globalStartBtn.style.display = 'flex';
+    
     document.getElementById('hud-training-info').classList.add('hidden');
     document.getElementById('hud-training-controls').classList.add('hidden');
     
@@ -205,7 +223,8 @@ function stopTraining(completed = false) {
             date: new Date().toISOString(),
             time: timeStr,
             reps: totalReps,
-            errors: totalErrors
+            errors: totalErrors,
+            repDetails: [...(trainingState.repDetails || [])]
         };
         saveWorkout(workoutData);
         
@@ -218,6 +237,25 @@ function stopTraining(completed = false) {
 document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('start-training-btn')?.addEventListener('click', startTraining);
     document.getElementById('cancel-training-btn')?.addEventListener('click', () => stopTraining(false));
+    
+    // Obsługa globalnego przycisku START
+    const globalStartBtn = document.getElementById('global-start-btn');
+    if (globalStartBtn) {
+        globalStartBtn.addEventListener('click', () => {
+            // Przełączenie na zakładkę Trening
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            const targetTab = document.getElementById('tab-training');
+            const targetBtn = document.querySelector('[data-tab="tab-training"]');
+            if (targetTab && targetBtn) {
+                targetTab.classList.add('active');
+                targetBtn.classList.add('active');
+            }
+            startTraining();
+        });
+        globalStartBtn.addEventListener('mouseenter', () => globalStartBtn.style.transform = 'scale(1.1)');
+        globalStartBtn.addEventListener('mouseleave', () => globalStartBtn.style.transform = 'scale(1)');
+    }
     
     // Przycisk zamykający okienko podsumowania
     document.getElementById('summary-close-btn')?.addEventListener('click', () => {
@@ -236,6 +274,10 @@ document.addEventListener('DOMContentLoaded', () => {
             workoutToDeleteIndex = null;
         }
         document.getElementById('delete-confirm-overlay').classList.add('hidden');
+    });
+    
+    document.getElementById('details-close-btn')?.addEventListener('click', () => {
+        document.getElementById('workout-details-overlay').classList.add('hidden');
     });
     
     updateStatsUI();
@@ -322,11 +364,11 @@ function updateStatsUI() {
                 item.innerHTML = `
                   <div style="flex: 1;">
                      <div style="font-weight: bold; color: var(--c3);">${dateStr}</div>
-                     <div style="font-size: 12px; color: #aaa;">Czas trwania: ${w.time}</div>
+                     <div style="font-size: 12px; color: var(--c1);">Czas trwania: ${w.time}</div>
                   </div>
                   <div style="text-align: right; display: flex; align-items: center; gap: 15px;">
                      <div>
-                       <div style="font-weight: bold; color: #fff;">${w.reps} powtórzeń</div>
+                       <div style="font-weight: bold; color: var(--text-main);">${w.reps} powtórzeń</div>
                        <div style="font-size: 12px; color: #ff4444;">${w.errors} błędów</div>
                      </div>
                      <button class="delete-workout-btn" title="Usuń trening" style="background: none; border: none; color: #ff4444; cursor: pointer; padding: 5px; opacity: 0.7; transition: opacity 0.2s;">
@@ -343,6 +385,12 @@ function updateStatsUI() {
                     e.stopPropagation(); // nie wyzwalaj zdarzeń dla nadrzędnych elementów
                     workoutToDeleteIndex = originalIdx;
                     document.getElementById('delete-confirm-overlay').classList.remove('hidden');
+                });
+                
+                // Zdarzenie podglądu
+                item.style.cursor = 'pointer';
+                item.addEventListener('click', () => {
+                    showWorkoutDetails(w);
                 });
                 
                 historyList.appendChild(item);
@@ -363,6 +411,10 @@ function updateStatsUI() {
             accuracyChartInstance.destroy();
         }
         
+        const rootStyles = getComputedStyle(document.documentElement);
+        const chartColor = rootStyles.getPropertyValue('--chart-color').trim();
+        const chartBg = rootStyles.getPropertyValue('--chart-bg').trim();
+
         accuracyChartInstance = new Chart(ctx, {
             type: 'line',
             data: {
@@ -370,10 +422,10 @@ function updateStatsUI() {
                 datasets: [{
                     label: 'Poprawność (%)',
                     data: chartData,
-                    borderColor: '#02f5c7', // var(--c3)
-                    backgroundColor: 'rgba(2, 245, 199, 0.2)',
+                    borderColor: chartColor,
+                    backgroundColor: chartBg,
                     borderWidth: 2,
-                    pointBackgroundColor: '#02f5c7',
+                    pointBackgroundColor: chartColor,
                     pointRadius: 5,
                     pointHoverRadius: 8,
                     fill: true,
@@ -410,8 +462,8 @@ function updateStatsUI() {
                         
                         const targetItem = document.getElementById(`history-item-${dataIndex}`);
                         if (targetItem) {
-                            targetItem.style.background = 'rgba(2, 245, 199, 0.2)';
-                            targetItem.style.border = '1px solid #02f5c7';
+                            targetItem.style.background = chartBg;
+                            targetItem.style.border = `1px solid ${chartColor}`;
                             targetItem.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
                         }
                     }
@@ -419,6 +471,47 @@ function updateStatsUI() {
             }
         });
     }
+}
+
+function showWorkoutDetails(workout) {
+    const overlay = document.getElementById('workout-details-overlay');
+    const headerInfo = document.getElementById('details-header-info');
+    const repsList = document.getElementById('details-reps-list');
+    
+    if (!overlay || !headerInfo || !repsList) return;
+    
+    const dateObj = new Date(workout.date);
+    headerInfo.textContent = `Data: ${dateObj.toLocaleDateString()} ${dateObj.toLocaleTimeString()} | Czas: ${workout.time} | Błędy: ${workout.errors}/${workout.reps}`;
+    
+    repsList.innerHTML = '';
+    
+    if (!workout.repDetails || workout.repDetails.length === 0) {
+        repsList.innerHTML = '<div style="color: var(--c1); text-align: center; padding: 20px;">Brak danych szczegółowych z tego treningu.</div>';
+    } else {
+        workout.repDetails.forEach(rep => {
+            const row = document.createElement('div');
+            row.style.display = 'flex';
+            row.style.justifyContent = 'space-between';
+            row.style.padding = '10px 15px';
+            row.style.borderRadius = '4px';
+            
+            const legName = rep.leg === 'right' ? 'Prawa noga' : 'Lewa noga';
+            const statusColor = rep.hasError ? '#ff4444' : '#2ecc71';
+            const statusText = rep.hasError ? (rep.errorType || 'Błąd postawy') : 'Idealnie';
+            
+            row.style.background = rep.hasError ? 'rgba(255, 68, 68, 0.1)' : 'rgba(46, 204, 113, 0.1)';
+            row.style.borderLeft = `4px solid ${statusColor}`;
+            
+            row.innerHTML = `
+              <div style="color: var(--text-main);">${legName} - Powtórzenie ${rep.repNumber}</div>
+              <div style="color: ${statusColor}; font-weight: bold;">${statusText}</div>
+            `;
+            
+            repsList.appendChild(row);
+        });
+    }
+    
+    overlay.classList.remove('hidden');
 }
 
 function updateExerciseUI(exercise) {
@@ -445,17 +538,19 @@ function updateExerciseUI(exercise) {
   const target = repetitionsInput ? repetitionsInput.value : '10';
 
   if (trainingMode) {
-     if (phase === 'READY') {
-         errorCountedThisRep = false;
-     }
+      if (phase === 'READY') {
+          errorCountedThisRep = false;
+          trainingState.currentRepErrorType = "";
+      }
 
-     // Alert o postawie w każdej chwili podczas treningu
-     if (exercise.metrics && exercise.metrics.badPosture) {
-         if (['DESCENDING', 'BOTTOM', 'ASCENDING'].includes(phase) && !errorCountedThisRep) {
-             errorCountedThisRep = true;
-             trainingState.errors++;
-             const errEl = document.getElementById('hud-errors');
-             if(errEl) errEl.textContent = trainingState.errors;
+      // Alert o postawie w każdej chwili podczas treningu
+      if (exercise.metrics && exercise.metrics.badPosture) {
+          if (['DESCENDING', 'BOTTOM', 'ASCENDING'].includes(phase) && !errorCountedThisRep) {
+              errorCountedThisRep = true;
+              trainingState.currentRepErrorType = exercise.metrics.postureErrorType || "Błąd postawy";
+              trainingState.errors++;
+              const errEl = document.getElementById('hud-errors');
+              if(errEl) errEl.textContent = trainingState.errors;
          }
 
          const now = Date.now();
@@ -468,6 +563,13 @@ function updateExerciseUI(exercise) {
      if (repCount > previousRepCount) {
          if (exercise.lastLeg === trainingState.targetLeg) {
              trainingState.repsDone++;
+             
+             trainingState.repDetails.push({
+                  leg: trainingState.targetLeg,
+                  repNumber: trainingState.repsDone,
+                  hasError: errorCountedThisRep,
+                  errorType: trainingState.currentRepErrorType
+             });
              
              if (trainingState.repsDone >= trainingState.targetReps) {
                  if (trainingState.targetLeg === 'right') {
@@ -773,230 +875,24 @@ async function enumerateCameras() {
 // Audio monitoring for debugging
 let audioContext = null;
 let analyser = null;
-let microphone = null;
-let dataArray = null;
-let animationFrame = null;
-let isMonitoring = false;
-let selectedDeviceId = null;
-
-const startAudioDebugBtn = document.getElementById('start-audio-debug-btn');
-const stopAudioDebugBtn = document.getElementById('stop-audio-debug-btn');
-const micSelect = document.getElementById('mic-select');
-const audioLevelBar = document.getElementById('audio-level-bar');
-const audioLevelText = document.getElementById('audio-level-text');
-const audioDebugInfo = document.getElementById('audio-debug-info');
-
-// Enumerate available microphones
-async function enumerateMicrophones() {
-  if(!micSelect) return;
-  try {
-    const devices = await navigator.mediaDevices.enumerateDevices();
-    const microphones = devices.filter(device => device.kind === 'audioinput');
-
-    micSelect.innerHTML = '<option value="">Domyślny</option>';
-    microphones.forEach(mic => {
-      const option = document.createElement('option');
-      option.value = mic.deviceId;
-      option.textContent = mic.label || `Mikrofon ${mic.deviceId.slice(0, 8)}`;
-      micSelect.appendChild(option);
-    });
-
-    console.log('[Audio Debug] Available microphones:', microphones.length);
-  } catch (error) {
-    console.error('[Audio Debug] Error enumerating microphones:', error);
-    if(audioDebugInfo) audioDebugInfo.textContent = 'Błąd enumeracji mikrofonów';
-  }
-}
-
-// Handle microphone selection change
-if(micSelect) {
-    micSelect.addEventListener('change', (e) => {
-    selectedDeviceId = e.target.value || null;
-    console.log('[Audio Debug] Selected microphone:', selectedDeviceId);
-    });
-}
-
-async function startAudioMonitoring() {
-  try {
-    // Request microphone access with specific device if selected
-    const constraints = {
-      audio: {
-        deviceId: selectedDeviceId ? { exact: selectedDeviceId } : undefined,
-        echoCancellation: false,
-        noiseSuppression: false,
-        autoGainControl: false,
-        sampleRate: 44100,
-        channelCount: 1
-      }
-    };
-
-    const stream = await navigator.mediaDevices.getUserMedia(constraints);
-
-    // Create audio context
-    audioContext = new (window.AudioContext || window.webkitAudioContext)();
-
-    // Resume audio context if suspended (required by modern browsers)
-    if (audioContext.state === 'suspended') {
-      await audioContext.resume();
-    }
-
-    analyser = audioContext.createAnalyser();
-    microphone = audioContext.createMediaStreamSource(stream);
-
-    // Configure analyser for better sensitivity
-    analyser.fftSize = 512; // Increased for better frequency resolution
-    analyser.smoothingTimeConstant = 0.1; // Reduced for more responsive updates
-    analyser.minDecibels = -90;
-    analyser.maxDecibels = -10;
-
-    const bufferLength = analyser.frequencyBinCount;
-    dataArray = new Uint8Array(bufferLength);
-
-    // Connect microphone to analyser
-    microphone.connect(analyser);
-
-    isMonitoring = true;
-    updateAudioLevel();
-
-    if(micSelect && audioDebugInfo) {
-        const selectedMicName = micSelect.options[micSelect.selectedIndex].textContent;
-        audioDebugInfo.textContent = `Monitorowanie audio aktywne (FFT: ${analyser.fftSize}, Context: ${audioContext.state}, Mic: ${selectedMicName})`;
-    }
-    console.log('[Audio Debug] Started monitoring, context state:', audioContext.state);
-
-  } catch (error) {
-    console.error('[Audio Debug] Error starting monitoring:', error);
-    if(audioDebugInfo) {
-        audioDebugInfo.textContent = `Błąd: ${error.message}`;
-
-        // Additional error information
-        if (error.name === 'NotAllowedError') {
-        audioDebugInfo.textContent += ' - Uprawnienia do mikrofonu zostały odrzucone';
-        } else if (error.name === 'NotFoundError') {
-        audioDebugInfo.textContent += ' - Mikrofon nie został znaleziony';
-        } else if (error.name === 'NotReadableError') {
-        audioDebugInfo.textContent += ' - Mikrofon jest już używany przez inną aplikację';
-        } else if (error.name === 'OverconstrainedError') {
-        audioDebugInfo.textContent += ' - Wybrany mikrofon nie jest dostępny';
-        }
-    }
-  }
-}
-
-function stopAudioMonitoring() {
-  if (animationFrame) {
-    cancelAnimationFrame(animationFrame);
-    animationFrame = null;
-  }
-
-  if (microphone) {
-    microphone.disconnect();
-    microphone = null;
-  }
-
-  if (audioContext && audioContext.state !== 'closed') {
-    audioContext.close();
-    audioContext = null;
-  }
-
-  analyser = null;
-  dataArray = null;
-  isMonitoring = false;
-
-  if(audioLevelBar && audioLevelText && audioDebugInfo) {
-      audioLevelBar.style.width = '0%';
-      audioLevelText.textContent = 'Poziom: 0%';
-      audioDebugInfo.textContent = 'Monitorowanie zatrzymane';
-  }
-  console.log('[Audio Debug] Stopped monitoring');
-}
-
-function updateAudioLevel() {
-  if (!isMonitoring || !analyser || !dataArray) {
-    return;
-  }
-
-  // Try different methods to get audio data
-  analyser.getByteFrequencyData(dataArray);
-
-  // Calculate RMS from frequency data
-  let sum = 0;
-  let validSamples = 0;
-
-  // Focus on lower frequencies (voice range: ~85-255 Hz)
-  const voiceStart = Math.floor(dataArray.length * 0.1); // ~85 Hz
-  const voiceEnd = Math.floor(dataArray.length * 0.5);   // ~2000 Hz
-
-  for (let i = voiceStart; i < voiceEnd; i++) {
-    const value = dataArray[i] / 255.0; // Normalize to 0-1
-    sum += value * value;
-    validSamples++;
-  }
-
-  const rms = validSamples > 0 ? Math.sqrt(sum / validSamples) : 0;
-  const level = Math.min(100, rms * 1000); // Amplify for visibility
-
-  // Alternative: use getByteTimeDomainData for waveform
-  const timeDataArray = new Uint8Array(analyser.fftSize);
-  analyser.getByteTimeDomainData(timeDataArray);
-
-  let timeSum = 0;
-  for (let i = 0; i < timeDataArray.length; i++) {
-    const sample = (timeDataArray[i] - 128) / 128.0; // Convert to -1 to 1
-    timeSum += sample * sample;
-  }
-  const timeRms = Math.sqrt(timeSum / timeDataArray.length);
-  const timeLevel = Math.min(100, timeRms * 500); // Different scaling
-
-  // Use the higher of the two measurements
-  const finalLevel = Math.max(level, timeLevel);
-
-  if(audioLevelBar && audioLevelText) {
-      // Update UI
-      audioLevelBar.style.width = `${finalLevel}%`;
-      audioLevelText.textContent = `Poziom: ${finalLevel.toFixed(1)}% (RMS: ${rms.toFixed(3)}, Time: ${timeRms.toFixed(3)})`;
-
-      // Color coding based on level
-      if (finalLevel < 5) {
-        audioLevelBar.style.background = '#6c757d'; // Gray for very low
-      } else if (finalLevel < 20) {
-        audioLevelBar.style.background = '#28a745'; // Green for normal
-      } else if (finalLevel < 50) {
-        audioLevelBar.style.background = '#ffc107'; // Yellow for high
-      } else {
-        audioLevelBar.style.background = '#dc3545'; // Red for very high
-      }
-  }
-
-  animationFrame = requestAnimationFrame(updateAudioLevel);
-}
-
-if(startAudioDebugBtn && stopAudioDebugBtn) {
-    startAudioDebugBtn.addEventListener('click', () => {
-    startAudioMonitoring();
-    startAudioDebugBtn.style.display = 'none';
-    stopAudioDebugBtn.style.display = 'inline-block';
-    });
-
-    stopAudioDebugBtn.addEventListener('click', () => {
-    stopAudioMonitoring();
-    startAudioDebugBtn.style.display = 'inline-block';
-    stopAudioDebugBtn.style.display = 'none';
-    });
-}
-
-// Cleanup on page unload
-window.addEventListener('beforeunload', () => {
-  stopAudioMonitoring();
-});
+// Ustawienia i opcje konfiguracyjne zostały zachowane, usunięto obsługę mikrofonu.
 
 //obsługa przycisku ustawień
 const saveSettingsBtn = document.getElementById('save-settings-btn');
+const themeSelect = document.getElementById('theme-select');
 const languageSelect = document.getElementById('language-select');
 const volumeSlider = document.getElementById('volume-slider');
 const volumeDisplay = document.getElementById('volume-display');
 const speechRateSlider = document.getElementById('speech-rate-slider');
 const speechRateDisplay = document.getElementById('speech-rate-display');
+
+// Szybki podgląd motywu (bez zapisu)
+if (themeSelect) {
+    themeSelect.addEventListener('change', (e) => {
+        document.documentElement.setAttribute('data-theme', e.target.value);
+        if (typeof loadHistory === 'function') loadHistory();
+    });
+}
 
 // Aktualizacja wyświetlania głośności
 if(volumeSlider && volumeDisplay) {
@@ -1008,7 +904,7 @@ if(volumeSlider && volumeDisplay) {
 // Aktualizacja wyświetlania szybkości mówienia
 if(speechRateSlider && speechRateDisplay) {
     speechRateSlider.addEventListener('input', () => {
-    speechRateDisplay.textContent = speechRateSlider.value;
+    speechRateDisplay.textContent = speechRateSlider.value + 'x';
     });
 }
 
@@ -1016,9 +912,10 @@ if(speechRateSlider && speechRateDisplay) {
 if(saveSettingsBtn) {
     saveSettingsBtn.addEventListener('click', async () => {
     const settings = {
+        theme: themeSelect ? themeSelect.value : 'light',
         language: languageSelect ? languageSelect.value : 'pl-PL',
         volume: volumeSlider ? parseFloat(volumeSlider.value) / 100 : 1, // Konwertuj na 0-1 dla Python
-        speech_rate: speechRateSlider ? parseInt(speechRateSlider.value) : 150
+        speech_rate: speechRateSlider ? Math.round(parseFloat(speechRateSlider.value) * 150) : 150
     };
 
     try {
@@ -1038,9 +935,10 @@ if(saveSettingsBtn) {
         if(speechOutput) speechOutput.value += `\n✓ Ustawienia zapisane pomyślnie`;
         // Zapisz również lokalnie
         saveSettings({
+            theme: themeSelect ? themeSelect.value : 'light',
             language: settings.language,
             volume: volumeSlider ? parseInt(volumeSlider.value) : 100, // Zachowaj jako procent dla UI
-            speechRate: settings.speech_rate
+            speechRate: speechRateSlider ? parseFloat(speechRateSlider.value) : 1.0
         });
         console.log('Ustawienia zapisane:', settings);
         } else {
@@ -1055,10 +953,7 @@ if(saveSettingsBtn) {
     });
 }
 
-// Inicjalizacja ustawień przy starcie aplikacji
 document.addEventListener('DOMContentLoaded', async () => {
-  // Zainicjuj listy urządzeń
-  enumerateMicrophones();
   enumerateCameras();
 
   // Inicjalizuj Config Service (zbieranie i wysyłanie konfiguracji)
@@ -1078,9 +973,10 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (data.status === 'success' && data.settings) {
         // Zaktualizuj ustawienia lokalne ustawieniami z serwera
         const serverSettings = {
+          theme: localSettings.theme || 'light', // Z serwera nie przychodzi theme, więc używamy lokalnego
           language: data.settings.language,
           volume: Math.round(data.settings.volume * 100), // Konwertuj na procenty
-          speechRate: data.settings.speech_rate
+          speechRate: data.settings.speech_rate ? parseFloat((data.settings.speech_rate / 150).toFixed(1)) : 1.0
         };
         saveSettings(serverSettings);
         applySettingsToUI(serverSettings);

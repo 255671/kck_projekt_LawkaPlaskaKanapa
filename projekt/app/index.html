@@ -90,10 +90,6 @@
           <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
           STATYSTYKI
         </button>
-        <button class="nav-btn" data-target="tab-actions">
-          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
-          TRENING
-        </button>
         <button class="nav-btn" data-target="tab-settings">
           <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
           USTAWIENIA
@@ -141,20 +137,6 @@
 
       </div>
 
-      <div id="tab-actions" class="tab-content">
-
-        <div class="panel flex-1 data-card">
-             <h3 class="panel-title">KONTROLA KAMERY</h3>
-             <div class="action-grid" style="margin-top: auto;">
-                <button id="toggle-camera-btn" class="btn btn-outline">
-                  <span>Pokaż kamerę</span>
-                </button>
-                <button id="start-training-btn" class="btn btn-accent">Podejmij próbę</button>
-             </div>
-          </div>
-
-      </div>
-
       <div id="tab-settings" class="tab-content">
 
         <div class="panel mb-20">
@@ -180,6 +162,12 @@
               <span>Włącz wyświetlanie punktów MediaPipe (AR)</span>
             </label>
             <small style="color: #999; display: block; margin-top: 5px;">Wyświetla punkty anatomiczne na wideo z kamery</small>
+          </div>
+          
+          <div class="form-group" style="margin-top: 20px;">
+             <button id="toggle-camera-btn" class="btn btn-outline btn-full">
+               <span>Pokaż kamerę w oknie</span>
+             </button>
           </div>
         </div>
 

@@ -235,22 +235,12 @@ function stopTraining(completed = false) {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-    document.getElementById('start-training-btn')?.addEventListener('click', startTraining);
     document.getElementById('cancel-training-btn')?.addEventListener('click', () => stopTraining(false));
     
     // Obsługa globalnego przycisku START
     const globalStartBtn = document.getElementById('global-start-btn');
     if (globalStartBtn) {
         globalStartBtn.addEventListener('click', () => {
-            // Przełączenie na zakładkę Trening
-            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-            const targetTab = document.getElementById('tab-training');
-            const targetBtn = document.querySelector('[data-tab="tab-training"]');
-            if (targetTab && targetBtn) {
-                targetTab.classList.add('active');
-                targetBtn.classList.add('active');
-            }
             startTraining();
         });
         globalStartBtn.addEventListener('mouseenter', () => globalStartBtn.style.transform = 'scale(1.1)');
@@ -890,7 +880,29 @@ const speechRateDisplay = document.getElementById('speech-rate-display');
 if (themeSelect) {
     themeSelect.addEventListener('change', (e) => {
         document.documentElement.setAttribute('data-theme', e.target.value);
-        if (typeof loadHistory === 'function') loadHistory();
+        
+        setTimeout(() => {
+            const rootStyles = getComputedStyle(document.documentElement);
+            const chartColor = rootStyles.getPropertyValue('--chart-color').trim();
+            const chartBg = rootStyles.getPropertyValue('--chart-bg').trim();
+            
+            // Płynna aktualizacja wykresu
+            if (typeof accuracyChartInstance !== 'undefined' && accuracyChartInstance) {
+                accuracyChartInstance.data.datasets[0].borderColor = chartColor;
+                accuracyChartInstance.data.datasets[0].backgroundColor = chartBg;
+                accuracyChartInstance.data.datasets[0].pointBackgroundColor = chartColor;
+                accuracyChartInstance.update();
+            }
+            
+            // Aktualizacja zaznaczonych elementów historii
+            const listItems = document.querySelectorAll('[id^="history-item-"]');
+            listItems.forEach(el => {
+                if (el.style.border !== '1px solid transparent' && el.style.border !== '') {
+                    el.style.background = chartBg;
+                    el.style.border = `1px solid ${chartColor}`;
+                }
+            });
+        }, 50);
     });
 }
 

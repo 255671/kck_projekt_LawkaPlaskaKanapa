@@ -53,6 +53,10 @@ body {
   overflow: hidden;
 }
 
+body, .panel, .video-header, .live-hud, .hud-phase-tracker, [id$="-overlay"], .stat-subtitle, .hud-target, .phase-step, .audio-debug-info {
+  transition: background-color 0.4s ease, background 0.4s ease, color 0.4s ease, border-color 0.4s ease, box-shadow 0.4s ease;
+}
+
 /* GŁÓWNY UKŁAD */
 .dashboard-container {
   display: flex;

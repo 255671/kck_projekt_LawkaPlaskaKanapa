@@ -146,8 +146,6 @@ function gatherConfiguration() {
     },
     exercise: {
       name: 'bulgarian_squat',
-      difficulty: document.getElementById('difficulty-select')?.value || 'intermediate',
-      duration: parseInt(document.getElementById('duration-input')?.value || 60),
       repetitions: parseInt(document.getElementById('repetitions-input')?.value || 10)
     },
     calibration: {
@@ -245,8 +243,6 @@ function attachConfigurationListeners() {
     'camera-select-side',
     'ar-overlay-enabled',
     // Exercise
-    'difficulty-select',
-    'duration-input',
     'repetitions-input'
   ];
 

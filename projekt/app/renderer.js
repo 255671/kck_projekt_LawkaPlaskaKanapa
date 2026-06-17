@@ -12,7 +12,7 @@ let isAudioOperationInProgress = false;
 
 // Domyślne ustawienia
 const defaultSettings = {
-  theme: 'light',
+  theme: 'system',
   language: 'pl-PL',
   volume: 100,
   speechRate: 1.0
@@ -38,9 +38,13 @@ function saveSettings(settings) {
   }
 }
 
+function applyThemeToDOM(themeValue) {
+  document.documentElement.setAttribute('data-theme', themeValue);
+}
+
 function applySettingsToUI(settings) {
-  const theme = settings.theme || 'light';
-  document.documentElement.setAttribute('data-theme', theme);
+  const theme = settings.theme || 'system';
+  applyThemeToDOM(theme);
   const themeSelect = document.getElementById('theme-select');
   if (themeSelect) themeSelect.value = theme;
 
@@ -340,13 +344,7 @@ function updateStatsUI() {
                 const originalIdx = data.length - 1 - reversedIdx;
                 const item = document.createElement('div');
                 item.id = `history-item-${originalIdx}`;
-                item.style.background = 'rgba(255,255,255,0.05)';
-                item.style.padding = '12px';
-                item.style.borderRadius = '6px';
-                item.style.display = 'flex';
-                item.style.justifyContent = 'space-between';
-                item.style.transition = 'all 0.3s ease';
-                item.style.border = '1px solid transparent';
+                item.className = 'history-item';
                 
                 const dateObj = new Date(w.date);
                 const dateStr = dateObj.toLocaleDateString() + ' ' + dateObj.toLocaleTimeString();
@@ -444,16 +442,12 @@ function updateStatsUI() {
                     if (elements.length > 0) {
                         const dataIndex = elements[0].index; // maps to originalIdx
                         // Reset all highlights
-                        const listItems = document.querySelectorAll('[id^="history-item-"]');
-                        listItems.forEach(el => {
-                            el.style.background = 'rgba(255,255,255,0.05)';
-                            el.style.border = '1px solid transparent';
-                        });
+                        const listItems = document.querySelectorAll('.history-item');
+                        listItems.forEach(el => el.classList.remove('active'));
                         
                         const targetItem = document.getElementById(`history-item-${dataIndex}`);
                         if (targetItem) {
-                            targetItem.style.background = chartBg;
-                            targetItem.style.border = `1px solid ${chartColor}`;
+                            targetItem.classList.add('active');
                             targetItem.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
                         }
                     }
@@ -876,35 +870,43 @@ const volumeDisplay = document.getElementById('volume-display');
 const speechRateSlider = document.getElementById('speech-rate-slider');
 const speechRateDisplay = document.getElementById('speech-rate-display');
 
-// Szybki podgląd motywu (bez zapisu)
+// Funkcja do aktualizacji kolorów na żywo
+function updateLiveChartColors() {
+    const rootStyles = getComputedStyle(document.documentElement);
+    const chartColor = rootStyles.getPropertyValue('--chart-color').trim();
+    const chartBg = rootStyles.getPropertyValue('--chart-bg').trim();
+    
+    // Płynna aktualizacja wykresu
+    if (typeof accuracyChartInstance !== 'undefined' && accuracyChartInstance) {
+        accuracyChartInstance.data.datasets[0].borderColor = chartColor;
+        accuracyChartInstance.data.datasets[0].backgroundColor = chartBg;
+        accuracyChartInstance.data.datasets[0].pointBackgroundColor = chartColor;
+        accuracyChartInstance.update();
+    }
+}
+
+// Szybki podgląd i automatyczny zapis motywu
 if (themeSelect) {
     themeSelect.addEventListener('change', (e) => {
-        document.documentElement.setAttribute('data-theme', e.target.value);
+        applyThemeToDOM(e.target.value);
+        setTimeout(updateLiveChartColors, 50);
         
-        setTimeout(() => {
-            const rootStyles = getComputedStyle(document.documentElement);
-            const chartColor = rootStyles.getPropertyValue('--chart-color').trim();
-            const chartBg = rootStyles.getPropertyValue('--chart-bg').trim();
-            
-            // Płynna aktualizacja wykresu
-            if (typeof accuracyChartInstance !== 'undefined' && accuracyChartInstance) {
-                accuracyChartInstance.data.datasets[0].borderColor = chartColor;
-                accuracyChartInstance.data.datasets[0].backgroundColor = chartBg;
-                accuracyChartInstance.data.datasets[0].pointBackgroundColor = chartColor;
-                accuracyChartInstance.update();
-            }
-            
-            // Aktualizacja zaznaczonych elementów historii
-            const listItems = document.querySelectorAll('[id^="history-item-"]');
-            listItems.forEach(el => {
-                if (el.style.border !== '1px solid transparent' && el.style.border !== '') {
-                    el.style.background = chartBg;
-                    el.style.border = `1px solid ${chartColor}`;
-                }
-            });
-        }, 50);
+        // Zapisz ustawienie od razu, by przetrwało restart
+        const currentSettings = loadSettings();
+        currentSettings.theme = e.target.value;
+        saveSettings(currentSettings);
     });
 }
+
+// Odbieraj sygnały od głównego okna Electron o zmianach w SO
+ipcRenderer.on('system-theme-updated', (event, isDark) => {
+    const localSettings = loadSettings();
+    if (localSettings.theme === 'system') {
+        // Tło zmienia się samo przez CSS media query, 
+        // musimy tylko zaktualizować wykresy w JS.
+        setTimeout(updateLiveChartColors, 50);
+    }
+});
 
 // Aktualizacja wyświetlania głośności
 if(volumeSlider && volumeDisplay) {
@@ -924,7 +926,7 @@ if(speechRateSlider && speechRateDisplay) {
 if(saveSettingsBtn) {
     saveSettingsBtn.addEventListener('click', async () => {
     const settings = {
-        theme: themeSelect ? themeSelect.value : 'light',
+        theme: themeSelect ? themeSelect.value : 'system',
         language: languageSelect ? languageSelect.value : 'pl-PL',
         volume: volumeSlider ? parseFloat(volumeSlider.value) / 100 : 1, // Konwertuj na 0-1 dla Python
         speech_rate: speechRateSlider ? Math.round(parseFloat(speechRateSlider.value) * 150) : 150
@@ -947,7 +949,7 @@ if(saveSettingsBtn) {
         if(speechOutput) speechOutput.value += `\n✓ Ustawienia zapisane pomyślnie`;
         // Zapisz również lokalnie
         saveSettings({
-            theme: themeSelect ? themeSelect.value : 'light',
+            theme: themeSelect ? themeSelect.value : 'system',
             language: settings.language,
             volume: volumeSlider ? parseInt(volumeSlider.value) : 100, // Zachowaj jako procent dla UI
             speechRate: speechRateSlider ? parseFloat(speechRateSlider.value) : 1.0
@@ -985,7 +987,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (data.status === 'success' && data.settings) {
         // Zaktualizuj ustawienia lokalne ustawieniami z serwera
         const serverSettings = {
-          theme: localSettings.theme || 'light', // Z serwera nie przychodzi theme, więc używamy lokalnego
+          theme: localSettings.theme || 'system', // Z serwera nie przychodzi theme, więc używamy lokalnego
           language: data.settings.language,
           volume: Math.round(data.settings.volume * 100), // Konwertuj na procenty
           speechRate: data.settings.speech_rate ? parseFloat((data.settings.speech_rate / 150).toFixed(1)) : 1.0

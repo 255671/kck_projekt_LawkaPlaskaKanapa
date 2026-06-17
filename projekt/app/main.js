@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, nativeTheme } = require('electron');
 const WebSocket = require('ws');
 const { spawn, spawnSync } = require('child_process');
 const net = require('net');
@@ -196,17 +196,33 @@ async function startPythonProcesses() {
 
 let win;
 
+ipcMain.on('trigger-calibration', (event) => {
+  if (mediapipeProcess) {
+    mediapipeProcess.kill('SIGINT');
+  }
+});
+
+// Zwróć obecny stan ciemnego motywu
+ipcMain.handle('get-system-theme', () => nativeTheme.shouldUseDarkColors);
+
 async function createWindow() {
   cleanupOldPythonServices();
   await startPythonProcesses();
   await waitForPort('127.0.0.1', mediapipePort, 10000);
 
   win = new BrowserWindow({
-    width: 800,
-    height: 600,
+    width: 1200,
+    height: 800,
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false
+    }
+  });
+
+  // Reagowanie na zmiany motywu systemowego
+  nativeTheme.on('updated', () => {
+    if (win) {
+      win.webContents.send('system-theme-updated', nativeTheme.shouldUseDarkColors);
     }
   });
 

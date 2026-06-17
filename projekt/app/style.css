@@ -1,4 +1,4 @@
-:root, [data-theme="light"] {
+:root, [data-theme="light"], [data-theme="system"] {
   /* User Custom Palette 7 - Light Monochrome */
   --c1: #666666; /* Muted text / secondary borders (Dark Gray) */
   --c2: #B3B3B3; /* Secondary elements (Medium Gray from palette) */
@@ -37,6 +37,26 @@
   --chart-color: #CCFF00;
   --chart-bg: rgba(204, 255, 0, 0.2);
   --hud-phase-bg: rgba(13, 13, 13, 0.8);
+}
+
+@media (prefers-color-scheme: dark) {
+  [data-theme="system"] {
+    --c1: #B3B3B3; 
+    --c2: #FFFF00; 
+    --c3: #CCFF00; 
+    --c3-glow: rgba(204, 255, 0, 0.5); 
+    --c4: #262626; 
+    --c5: #0D0D0D; 
+    --c6: #000000; 
+
+    --text-main: #FFFFFF;
+    --text-dark: #000000;
+
+    --overlay-bg: rgba(0, 0, 0, 0.95);
+    --chart-color: #CCFF00;
+    --chart-bg: rgba(204, 255, 0, 0.2);
+    --hud-phase-bg: rgba(13, 13, 13, 0.8);
+  }
 }
 
 * {
@@ -552,6 +572,27 @@ pre#output {
   position: relative;
   top: -12px;
   z-index: 1;
+}
+
+/* Historia treningów */
+.history-item {
+  background: rgba(128, 128, 128, 0.1);
+  padding: 12px;
+  border-radius: 6px;
+  display: flex;
+  justify-content: space-between;
+  transition: background-color 0.3s ease, border-color 0.3s ease;
+  border: 1px solid transparent;
+  cursor: pointer;
+}
+
+.history-item:hover {
+  background: rgba(128, 128, 128, 0.2);
+}
+
+.history-item.active {
+  background: var(--c3-glow) !important;
+  border-color: var(--chart-color) !important;
 }
 
 /* Subtle border around panels for premium look */

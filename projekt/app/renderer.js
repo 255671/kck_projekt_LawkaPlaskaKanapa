@@ -224,6 +224,20 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('summary-overlay').classList.add('hidden');
     });
     
+    // Obsługa własnego okienka do usuwania
+    document.getElementById('delete-cancel-btn')?.addEventListener('click', () => {
+        document.getElementById('delete-confirm-overlay').classList.add('hidden');
+        workoutToDeleteIndex = null;
+    });
+
+    document.getElementById('delete-confirm-btn')?.addEventListener('click', () => {
+        if (workoutToDeleteIndex !== null) {
+            deleteWorkout(workoutToDeleteIndex);
+            workoutToDeleteIndex = null;
+        }
+        document.getElementById('delete-confirm-overlay').classList.add('hidden');
+    });
+    
     updateStatsUI();
 });
 
@@ -242,7 +256,17 @@ function saveWorkout(workout) {
     updateStatsUI();
 }
 
+function deleteWorkout(index) {
+    const data = getWorkouts();
+    if (index >= 0 && index < data.length) {
+        data.splice(index, 1);
+        localStorage.setItem('workoutsDB', JSON.stringify(data));
+        updateStatsUI();
+    }
+}
+
 let accuracyChartInstance = null;
+let workoutToDeleteIndex = null;
 
 function updateStatsUI() {
     const data = getWorkouts();
@@ -296,15 +320,31 @@ function updateStatsUI() {
                 const dateStr = dateObj.toLocaleDateString() + ' ' + dateObj.toLocaleTimeString();
                 
                 item.innerHTML = `
-                  <div>
+                  <div style="flex: 1;">
                      <div style="font-weight: bold; color: var(--c3);">${dateStr}</div>
                      <div style="font-size: 12px; color: #aaa;">Czas trwania: ${w.time}</div>
                   </div>
-                  <div style="text-align: right;">
-                     <div style="font-weight: bold; color: #fff;">${w.reps} powtórzeń</div>
-                     <div style="font-size: 12px; color: #ff4444;">${w.errors} błędów</div>
+                  <div style="text-align: right; display: flex; align-items: center; gap: 15px;">
+                     <div>
+                       <div style="font-weight: bold; color: #fff;">${w.reps} powtórzeń</div>
+                       <div style="font-size: 12px; color: #ff4444;">${w.errors} błędów</div>
+                     </div>
+                     <button class="delete-workout-btn" title="Usuń trening" style="background: none; border: none; color: #ff4444; cursor: pointer; padding: 5px; opacity: 0.7; transition: opacity 0.2s;">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+                     </button>
                   </div>
                 `;
+                
+                // Zdarzenie usuwania
+                const delBtn = item.querySelector('.delete-workout-btn');
+                delBtn.addEventListener('mouseenter', () => delBtn.style.opacity = '1');
+                delBtn.addEventListener('mouseleave', () => delBtn.style.opacity = '0.7');
+                delBtn.addEventListener('click', (e) => {
+                    e.stopPropagation(); // nie wyzwalaj zdarzeń dla nadrzędnych elementów
+                    workoutToDeleteIndex = originalIdx;
+                    document.getElementById('delete-confirm-overlay').classList.remove('hidden');
+                });
+                
                 historyList.appendChild(item);
             });
         }

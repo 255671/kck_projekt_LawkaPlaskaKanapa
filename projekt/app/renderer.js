@@ -200,6 +200,15 @@ function stopTraining(completed = false) {
         
         document.getElementById('summary-overlay').classList.remove('hidden');
         
+        // Zapis do JSON DB
+        const workoutData = {
+            date: new Date().toISOString(),
+            time: timeStr,
+            reps: totalReps,
+            errors: totalErrors
+        };
+        saveWorkout(workoutData);
+        
         speakMessage(`Trening zakończony pomyślnie. Czas: ${timeStr}. Zarejestrowane błędy: ${totalErrors}.`);
     } else {
         speakMessage("Trening anulowany.");
@@ -214,7 +223,163 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('summary-close-btn')?.addEventListener('click', () => {
         document.getElementById('summary-overlay').classList.add('hidden');
     });
+    
+    updateStatsUI();
 });
+
+// =========================================================
+// DATABASE & STATS
+// =========================================================
+function getWorkouts() {
+    const data = localStorage.getItem('workoutsDB');
+    return data ? JSON.parse(data) : [];
+}
+
+function saveWorkout(workout) {
+    const data = getWorkouts();
+    data.push(workout);
+    localStorage.setItem('workoutsDB', JSON.stringify(data));
+    updateStatsUI();
+}
+
+let accuracyChartInstance = null;
+
+function updateStatsUI() {
+    const data = getWorkouts();
+    
+    let totalReps = 0;
+    let totalErrors = 0;
+    data.forEach(w => {
+        totalReps += w.reps || 0;
+        totalErrors += w.errors || 0;
+    });
+    
+    const workoutsEl = document.getElementById('stats-total-workouts');
+    if (workoutsEl) workoutsEl.textContent = data.length;
+    
+    const repsEl = document.getElementById('stats-total-reps');
+    if (repsEl) repsEl.textContent = totalReps;
+    
+    const errorsEl = document.getElementById('stats-total-errors');
+    if (errorsEl) errorsEl.textContent = totalErrors;
+    
+    const accEl = document.getElementById('stats-accuracy');
+    if (accEl) {
+        if (totalReps === 0) {
+            accEl.textContent = '--%';
+        } else {
+            const accuracy = Math.max(0, 100 - ((totalErrors / totalReps) * 100));
+            accEl.textContent = accuracy.toFixed(1) + '%';
+        }
+    }
+    
+    const historyList = document.getElementById('history-list');
+    if (historyList) {
+        historyList.innerHTML = '';
+        if (data.length === 0) {
+            historyList.innerHTML = '<div style="color: #666; text-align: center; margin-top: 20px;">Brak zapisanych treningów.</div>';
+        } else {
+            const reversed = [...data].reverse();
+            reversed.forEach((w, reversedIdx) => {
+                const originalIdx = data.length - 1 - reversedIdx;
+                const item = document.createElement('div');
+                item.id = `history-item-${originalIdx}`;
+                item.style.background = 'rgba(255,255,255,0.05)';
+                item.style.padding = '12px';
+                item.style.borderRadius = '6px';
+                item.style.display = 'flex';
+                item.style.justifyContent = 'space-between';
+                item.style.transition = 'all 0.3s ease';
+                item.style.border = '1px solid transparent';
+                
+                const dateObj = new Date(w.date);
+                const dateStr = dateObj.toLocaleDateString() + ' ' + dateObj.toLocaleTimeString();
+                
+                item.innerHTML = `
+                  <div>
+                     <div style="font-weight: bold; color: var(--c3);">${dateStr}</div>
+                     <div style="font-size: 12px; color: #aaa;">Czas trwania: ${w.time}</div>
+                  </div>
+                  <div style="text-align: right;">
+                     <div style="font-weight: bold; color: #fff;">${w.reps} powtórzeń</div>
+                     <div style="font-size: 12px; color: #ff4444;">${w.errors} błędów</div>
+                  </div>
+                `;
+                historyList.appendChild(item);
+            });
+        }
+    }
+    
+    // Generowanie Wykresu
+    const ctx = document.getElementById('accuracyChart');
+    if (ctx && window.Chart) {
+        const labels = data.map((w, idx) => `Tr. ${idx+1}`);
+        const chartData = data.map(w => {
+            if (!w.reps) return 0;
+            return Math.max(0, 100 - (w.errors / w.reps * 100)).toFixed(1);
+        });
+
+        if (accuracyChartInstance) {
+            accuracyChartInstance.destroy();
+        }
+        
+        accuracyChartInstance = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Poprawność (%)',
+                    data: chartData,
+                    borderColor: '#02f5c7', // var(--c3)
+                    backgroundColor: 'rgba(2, 245, 199, 0.2)',
+                    borderWidth: 2,
+                    pointBackgroundColor: '#02f5c7',
+                    pointRadius: 5,
+                    pointHoverRadius: 8,
+                    fill: true,
+                    tension: 0.3
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        max: 100,
+                        grid: { color: 'rgba(255, 255, 255, 0.1)' },
+                        ticks: { color: '#ccc' }
+                    },
+                    x: {
+                        grid: { color: 'rgba(255, 255, 255, 0.1)' },
+                        ticks: { color: '#ccc' }
+                    }
+                },
+                plugins: {
+                    legend: { display: false }
+                },
+                onClick: (e, elements) => {
+                    if (elements.length > 0) {
+                        const dataIndex = elements[0].index; // maps to originalIdx
+                        // Reset all highlights
+                        const listItems = document.querySelectorAll('[id^="history-item-"]');
+                        listItems.forEach(el => {
+                            el.style.background = 'rgba(255,255,255,0.05)';
+                            el.style.border = '1px solid transparent';
+                        });
+                        
+                        const targetItem = document.getElementById(`history-item-${dataIndex}`);
+                        if (targetItem) {
+                            targetItem.style.background = 'rgba(2, 245, 199, 0.2)';
+                            targetItem.style.border = '1px solid #02f5c7';
+                            targetItem.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                        }
+                    }
+                }
+            }
+        });
+    }
+}
 
 function updateExerciseUI(exercise) {
   if (!exercise) return;
@@ -367,8 +532,10 @@ ipcRenderer.on('mediapipe-data', (event, data) => {
   } else {
     // W tej uproszczonej wersji logi lądują w textarea
     const output = document.getElementById('output');
-    output.innerText += '\n' + JSON.stringify(data);
-    output.scrollTop = output.scrollHeight;
+    if (output) {
+      output.innerText += '\n' + JSON.stringify(data);
+      output.scrollTop = output.scrollHeight;
+    }
   }
 });
 

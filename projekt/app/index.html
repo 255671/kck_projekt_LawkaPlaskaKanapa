@@ -104,44 +104,39 @@
 
         <div class="split-panels">
           <div class="panel flex-1 chart-panel-wrapper">
-            <h3 class="panel-title">PROGRES WZGLĘDEM POPRZEDNICH TRENINGÓW</h3>
-            <div class="chart-container line-chart-container empty-chart">
-               </div>
+            <h3 class="panel-title">HISTORIA TRENINGÓW (JSON DB)</h3>
+            <div id="history-list" style="display: flex; flex-direction: column; gap: 10px; overflow-y: auto; max-height: 220px; padding-right: 5px;">
+              <!-- Tu wpada JS -->
+            </div>
           </div>
 
-          <div class="panel flex-1 chart-panel-wrapper">
-            <h3 class="panel-title">NAJCZĘSTSZE BŁĘDY</h3>
-            <div class="chart-container bar-chart-container empty-chart">
-               </div>
-          </div>
-        </div>
-
-        <div class="split-panels">
           <div class="panel flex-1 data-card">
-            <h3 class="panel-title">POPRAWNOŚĆ TRENINGU</h3>
-            <div class="stat-value highlight">--%</div>
-            <div class="stat-subtitle">&nbsp;</div>
+            <h3 class="panel-title">OGÓLNA POPRAWNOŚĆ</h3>
+            <div class="stat-value highlight" id="stats-accuracy">--%</div>
+            <div class="stat-subtitle">Wszystkie sesje</div>
 
             <div class="stat-divider"></div>
 
             <div class="stat-row">
-              <span>Zaliczone powtórzenia</span>
-              <span class="stat-num"><span id="stats-rep-count">0</span> / <span id="stats-rep-target">10</span></span>
+              <span>Suma powtórzeń</span>
+              <span class="stat-num" id="stats-total-reps">0</span>
             </div>
             <div class="stat-row">
-              <span>Faza / kąt kolana</span>
-              <span class="stat-num"><span id="stats-rep-phase">--</span> / <span id="stats-knee-angle">--</span>°</span>
+              <span>Suma błędów postawy</span>
+              <span class="stat-num" id="stats-total-errors">0</span>
             </div>
             <div class="stat-row">
-              <span>Średni czas napięcia</span>
-              <span class="stat-num">--s</span>
+              <span>Ilość treningów</span>
+              <span class="stat-num" id="stats-total-workouts">0</span>
             </div>
           </div>
         </div>
 
-        <div class="panel">
-          <h3 class="panel-title">LOGI SYSTEMOWE</h3>
-          <pre id="output" placeholder="Oczekuję na dane...">TRENER SYSTEM&gt; Moduł uruchomiony. Oczekiwanie na kamerę.&#10;TRENER SYSTEM&gt; System gotowy.</pre>
+        <div class="panel" style="margin-top: 20px;">
+          <h3 class="panel-title">WYKRES POPRAWNOŚCI W CZASIE</h3>
+          <div style="width: 100%; height: 250px; display: flex; justify-content: center; align-items: center; position: relative;">
+            <canvas id="accuracyChart"></canvas>
+          </div>
         </div>
 
       </div>
@@ -165,11 +160,6 @@
             <button id="speak-btn" class="btn btn-outline">Przeczytaj tekst</button>
             <button id="listen-btn" class="btn btn-accent">Nasłuchuj komendy</button>
           </div>
-        </div>
-
-        <div class="panel">
-          <h3 class="panel-title">ROZPOZNANY TEKST</h3>
-          <textarea id="speech-output" readonly placeholder="Rozpoznany tekst pojawi się tutaj..."></textarea>
         </div>
 
       </div>
@@ -323,6 +313,7 @@
     </div>
   </div>
 
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="config-service.js"></script>
   <script src="renderer.js"></script>
   <script src="script.js"></script>

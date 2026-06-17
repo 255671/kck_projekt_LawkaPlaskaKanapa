@@ -29,6 +29,41 @@ function loadSettings() {
   }
 }
 
+// Globalny Web Audio API kontekst dla dzwonka
+let audioCtx = null;
+
+function playDingSound() {
+    try {
+        if (!audioCtx) {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        if (audioCtx.state === 'suspended') {
+            audioCtx.resume();
+        }
+        const oscillator = audioCtx.createOscillator();
+        const gainNode = audioCtx.createGain();
+        
+        oscillator.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
+        
+        // Czysty, wysoki dzwonek (C6)
+        oscillator.type = 'sine';
+        oscillator.frequency.setValueAtTime(1046.50, audioCtx.currentTime);
+        
+        // Regulacja głośności wg suwaka w ustawieniach
+        const volumeSlider = document.getElementById('volume-slider');
+        const masterVol = volumeSlider ? (parseFloat(volumeSlider.value) / 100) : 0.5;
+        
+        gainNode.gain.setValueAtTime(masterVol * 0.8, audioCtx.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5); // zanikanie
+        
+        oscillator.start();
+        oscillator.stop(audioCtx.currentTime + 0.5);
+    } catch (e) {
+        console.error("Audio playback failed", e);
+    }
+}
+
 function saveSettings(settings) {
   try {
     localStorage.setItem('virtualTrainerSettings', JSON.stringify(settings));
@@ -547,6 +582,7 @@ function updateExerciseUI(exercise) {
      if (repCount > previousRepCount) {
          if (exercise.lastLeg === trainingState.targetLeg) {
              trainingState.repsDone++;
+             playDingSound(); // Odtwórz dzwonek przy zaliczeniu
              
              trainingState.repDetails.push({
                   leg: trainingState.targetLeg,
